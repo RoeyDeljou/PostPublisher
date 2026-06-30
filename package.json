@@ -1,0 +1,25 @@
+{
+  "name": "social-posts-system",
+  "version": "1.0.0",
+  "description": "Automated LinkedIn post creator and publisher using Claude AI",
+  "type": "commonjs",
+  "main": "src/run.js",
+  "scripts": {
+    "generate": "node src/generate.js",
+    "post": "node src/run.js",
+    "auth": "node scripts/auth.js",
+    "auth:org": "node scripts/auth.js --org",
+    "generate-batch": "node scripts/generate-batch.js",
+    "dashboard": "npx serve . --listen 3001"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@napi-rs/canvas": "^0.1.68"
+  },
+  "devDependencies": {
+    "serve": "^14.2.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

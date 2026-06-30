@@ -1,0 +1,43 @@
+name: Regenerate Post Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      post_id:
+        description: "Post ID to regenerate image for"
+        required: true
+        type: number
+      notes:
+        description: "Notes on what to change (e.g. 'use stadium aerial view, no abstract shapes')"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+
+      - name: Regenerate image
+        run: |
+          node src/generate.js \
+            --post-id ${{ inputs.post_id }} \
+            --image-only \
+            ${{ inputs.notes && format('--notes "{0}"', inputs.notes) || '' }}
+        env:
+          NODE_ENV: production
+
+      - name: Commit new image
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/posts.db data/images/
+          git diff --staged --quiet || git commit -m "chore: regenerate image post ${{ inputs.post_id }}"
+          git push

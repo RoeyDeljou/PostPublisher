@@ -1,0 +1,38 @@
+name: Generate Daily Post (Phase 1)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC — 2 hours before publish
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Optional notes / topic direction"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+
+      - name: Generate content + image
+        run: node src/generate.js ${{ inputs.notes && format('--notes "{0}"', inputs.notes) || '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NODE_ENV: production
+
+      - name: Commit pending post + image
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/posts.db data/images/ 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: generate pending post $(date -u +%F)"
+          git push

@@ -1,0 +1,47 @@
+name: Publish Daily Post (Phase 2)
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC — auto-publishes unless rejected in dashboard
+  workflow_dispatch:        # manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+
+      - name: Publish pending post
+        run: node src/run.js
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LINKEDIN_TOKEN: ${{ secrets.LINKEDIN_TOKEN }}
+          LINKEDIN_TOKEN_EXPIRES_AT: ${{ secrets.LINKEDIN_TOKEN_EXPIRES_AT }}
+          LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
+          LINKEDIN_ORG_URN: ${{ secrets.LINKEDIN_ORG_URN }}
+          LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          NODE_ENV: production
+
+      - name: Persist state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/posts.db data/run-log.jsonl data/token-expiry-alert.txt 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: publish state $(date -u +%F)"
+          git push
+
+      - name: Token expiry alert
+        if: always()
+        run: |
+          if [ -f data/token-expiry-alert.txt ]; then
+            echo "::warning::$(cat data/token-expiry-alert.txt)"
+          fi

@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elite Sports AI Forge — Post Dashboard</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --primary:#0A66C2;--accent:#00C896;--danger:#D93025;--warn:#f59e0b;
+      --bg:#f0f4f8;--card:#fff;--text:#0f1923;--muted:#6b7280;--border:#e5e7eb;
+      --strip:#050f23;--radius:12px;
+    }
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+    /* Header */
+    header{background:var(--strip);color:#fff;padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+    header h1{font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:.6rem}
+    header h1 span.accent{color:var(--accent)}
+    .header-right{display:flex;align-items:center;gap:.75rem}
+    .db-badge{background:rgba(0,200,150,.15);border:1px solid var(--accent);color:var(--accent);border-radius:20px;padding:.25rem .85rem;font-size:.78rem;font-weight:600}
+
+    /* Nav tabs */
+    nav{background:var(--card);border-bottom:2px solid var(--border);padding:0 2rem;display:flex;gap:0}
+    nav button{border:none;background:none;padding:.9rem 1.5rem;font-size:.9rem;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
+    nav button.active{color:var(--primary);border-bottom-color:var(--primary)}
+    nav button:hover:not(.active){color:var(--text)}
+
+    /* Alert banner */
+    .alert-banner{display:none;background:#fef3c7;border-left:5px solid var(--warn);padding:.9rem 1.5rem;font-size:.9rem}
+    .alert-banner.show{display:flex;align-items:center;gap:.75rem}
+
+    /* Main */
+    main{max-width:1300px;margin:0 auto;padding:1.5rem}
+
+    /* Stats row */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem}
+    .stat{background:var(--card);border-radius:var(--radius);padding:1.1rem 1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+    .stat .lbl{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem}
+    .stat .val{font-size:1.9rem;font-weight:800;color:var(--primary)}
+    .stat.s-green .val{color:#059669}
+    .stat.s-amber .val{color:#d97706}
+    .stat.s-red   .val{color:var(--danger)}
+
+    /* Panels */
+    .panel{display:none}.panel.active{display:block}
+
+    /* ── PENDING POST PANEL ─────────────────────────────────────── */
+    .preview-layout{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+    @media(max-width:860px){.preview-layout{grid-template-columns:1fr}}
+    .preview-image-wrap{position:relative;background:var(--strip);border-radius:var(--radius);overflow:hidden;aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+    .preview-image-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    .img-placeholder{color:rgba(255,255,255,.3);font-size:.9rem;text-align:center;padding:2rem}
+    .preview-text-wrap{display:flex;flex-direction:column;gap:1rem}
+    .card{background:var(--card);border-radius:var(--radius);padding:1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+    .card-label{font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem}
+    textarea.post-body{width:100%;min-height:260px;border:1.5px solid var(--border);border-radius:8px;padding:.75rem;font-size:.88rem;line-height:1.55;resize:vertical;font-family:inherit;color:var(--text)}
+    textarea.post-body:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(10,102,194,.12)}
+    .hashtags-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.25rem}
+    .hashtag{background:#e7f0fb;color:var(--primary);border-radius:20px;padding:.2rem .65rem;font-size:.78rem;font-weight:600}
+    .action-row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.25rem}
+    .btn{border:none;border-radius:8px;padding:.65rem 1.3rem;font-size:.88rem;font-weight:700;cursor:pointer;transition:opacity .15s,transform .1s;display:inline-flex;align-items:center;gap:.4rem}
+    .btn:active{transform:scale(.97)}
+    .btn:hover{opacity:.88}
+    .btn-primary{background:var(--primary);color:#fff}
+    .btn-success{background:#059669;color:#fff}
+    .btn-warn{background:var(--warn);color:#fff}
+    .btn-danger{background:var(--danger);color:#fff}
+    .btn-ghost{background:transparent;color:var(--muted);border:1.5px solid var(--border)}
+    .btn-sm{padding:.4rem .8rem;font-size:.8rem}
+    .notes-wrap{display:none;margin-top:.75rem}
+    .notes-wrap.open{display:block}
+    textarea.notes{width:100%;height:80px;border:1.5px solid var(--border);border-radius:8px;padding:.6rem;font-size:.85rem;resize:vertical;font-family:inherit}
+    textarea.notes:focus{outline:none;border-color:var(--warn)}
+    .status-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .75rem;border-radius:20px;font-size:.78rem;font-weight:700}
+    .pill-pending{background:#fef3c7;color:#92400e}
+    .pill-approved{background:#d1fae5;color:#065f46}
+    .pill-rejected{background:#fee2e2;color:#991b1b}
+    .pill-posted{background:#dbeafe;color:#1e40af}
+    .no-pending{text-align:center;padding:4rem 2rem;color:var(--muted)}
+    .no-pending h2{font-size:1.3rem;margin-bottom:.5rem;color:var(--text)}
+    .schedule-info{font-size:.82rem;color:var(--muted);margin-top:.4rem}
+    .github-config-note{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:.85rem 1rem;font-size:.82rem;margin-bottom:1rem;color:#1e40af}
+
+    /* ── GALLERY PANEL ──────────────────────────────────────────── */
+    .gallery-controls{display:flex;gap:.75rem;margin-bottom:1.25rem;align-items:center;flex-wrap:wrap}
+    .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem}
+    .gallery-card{background:var(--card);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);transition:box-shadow .15s}
+    .gallery-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
+    .gallery-card .gc-img{aspect-ratio:1;overflow:hidden;background:var(--strip);position:relative}
+    .gallery-card .gc-img img{width:100%;height:100%;object-fit:cover;display:block}
+    .gallery-card .gc-body{padding:.85rem 1rem}
+    .gallery-card .gc-date{font-size:.75rem;color:var(--muted);margin-bottom:.3rem}
+    .gallery-card .gc-angle{font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:.4rem;line-height:1.3}
+    .gallery-card .gc-footer{display:flex;align-items:center;justify-content:space-between;margin-top:.5rem}
+
+    /* ── ALL POSTS PANEL ────────────────────────────────────────── */
+    .table-controls{display:flex;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;align-items:center}
+    .table-controls input{flex:1;min-width:200px;padding:.6rem 1rem;border:1.5px solid var(--border);border-radius:8px;font-size:.88rem}
+    .table-controls input:focus{outline:none;border-color:var(--primary)}
+    .table-controls select{padding:.6rem 1rem;border:1.5px solid var(--border);border-radius:8px;font-size:.88rem;background:#fff;cursor:pointer}
+    table{width:100%;border-collapse:collapse;background:var(--card);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+    thead{background:var(--strip);color:#fff}
+    th,td{padding:.8rem 1rem;text-align:left;font-size:.85rem}
+    th{font-weight:600;white-space:nowrap}
+    tr:not(:last-child) td{border-bottom:1px solid var(--border)}
+    tbody tr:hover{background:#f9fafb}
+    .status{display:inline-block;padding:.2rem .6rem;border-radius:12px;font-size:.74rem;font-weight:700}
+    .status-pending{background:#fef3c7;color:#92400e}
+    .status-posted{background:#d1fae5;color:#065f46}
+    .status-failed{background:#fee2e2;color:#991b1b}
+    .status-deleted{background:#f3f4f6;color:#6b7280}
+    .body-cell{max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    a.urn-link{color:var(--primary);font-size:.78rem;text-decoration:none}
+    a.urn-link:hover{text-decoration:underline}
+
+    /* Settings modal */
+    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center}
+    .modal-bg.open{display:flex}
+    .modal{background:var(--card);border-radius:var(--radius);padding:2rem;width:min(540px,95vw);box-shadow:0 8px 40px rgba(0,0,0,.2)}
+    .modal h2{font-size:1.15rem;font-weight:700;margin-bottom:1.25rem}
+    .field{margin-bottom:1rem}
+    .field label{display:block;font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.04em}
+    .field input{width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem}
+    .field input:focus{outline:none;border-color:var(--primary)}
+    .modal-footer{display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.25rem}
+    .toast{position:fixed;bottom:2rem;right:2rem;background:var(--strip);color:#fff;padding:.85rem 1.4rem;border-radius:10px;font-size:.88rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.25);transform:translateY(100px);opacity:0;transition:transform .3s,opacity .3s;z-index:200}
+    .toast.show{transform:translateY(0);opacity:1}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Elite Sports AI Forge <span class="accent">—</span> Post Dashboard</h1>
+  <div class="header-right">
+    <span class="db-badge" id="db-badge">Loading…</span>
+    <button class="btn btn-ghost btn-sm" onclick="openSettings()">⚙ Settings</button>
+    <button class="btn btn-primary btn-sm" onclick="loadDb()">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="alert-banner" id="token-alert">
+  ⚠️ <strong id="token-alert-msg"></strong>
+</div>
+
+<nav>
+  <button class="active" onclick="showTab('pending',this)">📋 Next Post</button>
+  <button onclick="showTab('gallery',this)">🖼 Gallery</button>
+  <button onclick="showTab('all',this)">📊 All Posts</button>
+</nav>
+
+<main>
+  <!-- Stats -->
+  <div class="stats" id="stats-row">
+    <div class="stat"><div class="lbl">Total</div><div class="val" id="s-total">—</div></div>
+    <div class="stat s-green"><div class="lbl">Posted</div><div class="val" id="s-posted">—</div></div>
+    <div class="stat s-amber"><div class="lbl">Pending</div><div class="val" id="s-pending">—</div></div>
+    <div class="stat s-red"><div class="lbl">Failed</div><div class="val" id="s-failed">—</div></div>
+  </div>
+
+  <!-- ── TAB: NEXT POST ──────────────────────────────────────────────── -->
+  <div class="panel active" id="panel-pending">
+    <div class="github-config-note" id="config-note" style="display:none">
+      ⚙️ Set your GitHub token in <strong>Settings</strong> to enable approve / regenerate actions.
+    </div>
+    <div id="pending-content"></div>
+  </div>
+
+  <!-- ── TAB: GALLERY ───────────────────────────────────────────────── -->
+  <div class="panel" id="panel-gallery">
+    <div class="gallery-controls">
+      <select id="gallery-filter" onchange="renderGallery()">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="posted">Posted</option>
+      </select>
+      <span id="gallery-count" style="color:var(--muted);font-size:.85rem"></span>
+    </div>
+    <div class="gallery-grid" id="gallery-grid"></div>
+  </div>
+
+  <!-- ── TAB: ALL POSTS ─────────────────────────────────────────────── -->
+  <div class="panel" id="panel-all">
+    <div class="table-controls">
+      <input type="text" id="search" placeholder="Search posts…" oninput="renderTable()" />
+      <select id="filter-status" onchange="renderTable()">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="posted">Posted</option>
+        <option value="failed">Failed</option>
+        <option value="deleted">Deleted</option>
+      </select>
+    </div>
+    <table id="posts-table">
+      <thead><tr>
+        <th>ID</th><th>Status</th><th>Date</th><th>Topic</th><th>Preview</th><th>LinkedIn</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="posts-body"></tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Settings Modal -->
+<div class="modal-bg" id="settings-modal">
+  <div class="modal">
+    <h2>⚙️ GitHub Settings</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+      Required for Approve / Regenerate actions. Your token is stored only in this browser (localStorage).
+      Create a fine-grained PAT with <strong>Actions: write</strong> and <strong>Contents: write</strong> permissions.
+    </p>
+    <div class="field"><label>GitHub Owner (username or org)</label>
+      <input id="cfg-owner" placeholder="e.g. johndoe" /></div>
+    <div class="field"><label>Repository Name</label>
+      <input id="cfg-repo" placeholder="e.g. social-posts-system" /></div>
+    <div class="field"><label>GitHub Personal Access Token</label>
+      <input id="cfg-token" type="password" placeholder="github_pat_..." /></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.min.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allRows = [];
+let DB_LOADED = false;
+
+// ── Settings ───────────────────────────────────────────────────────────────
+function getCfg() {
+  return {
+    owner: localStorage.getItem('gh_owner') || '',
+    repo:  localStorage.getItem('gh_repo')  || '',
+    token: localStorage.getItem('gh_token') || '',
+  };
+}
+function saveCfg(o,r,t){ localStorage.setItem('gh_owner',o); localStorage.setItem('gh_repo',r); localStorage.setItem('gh_token',t); }
+function openSettings(){
+  const c=getCfg();
+  document.getElementById('cfg-owner').value=c.owner;
+  document.getElementById('cfg-repo').value=c.repo;
+  document.getElementById('cfg-token').value=c.token;
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings(){ document.getElementById('settings-modal').classList.remove('open'); }
+function saveSettings(){
+  const o=document.getElementById('cfg-owner').value.trim();
+  const r=document.getElementById('cfg-repo').value.trim();
+  const t=document.getElementById('cfg-token').value.trim();
+  saveCfg(o,r,t);
+  closeSettings();
+  toast('Settings saved ✓');
+  renderPendingPanel();
+}
+
+// ── Toast ───────────────────────────────────────────────────────────────────
+function toast(msg, dur=3000){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), dur);
+}
+
+// ── Tab navigation ──────────────────────────────────────────────────────────
+function showTab(name, btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── DB Load ─────────────────────────────────────────────────────────────────
+// Works both locally (served from root: /data/posts.db) and on GitHub Pages (../data/posts.db)
+const DB_URL = window.location.pathname.includes('/dashboard/') ? '../data/posts.db' : '/data/posts.db';
+
+async function loadDb(){
+  document.getElementById('db-badge').textContent = 'Loading…';
+  try {
+    const SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
+    const resp = await fetch(DB_URL + '?t=' + Date.now());
+    if (!resp.ok) throw new Error(`DB fetch failed: ${resp.status}`);
+    const buf = await resp.arrayBuffer();
+    const db = new SQL.Database(new Uint8Array(buf));
+
+    const res = db.exec('SELECT * FROM posts ORDER BY created_at DESC');
+    allRows = res.length ? res[0].values.map(row => {
+      const obj={};
+      res[0].columns.forEach((c,i) => obj[c]=row[i]);
+      return obj;
+    }) : [];
+
+    // Token log check
+    try {
+      const tlr = db.exec('SELECT * FROM token_log ORDER BY checked_at DESC LIMIT 1');
+      if (tlr.length && tlr[0].values.length) {
+        const tCols=tlr[0].columns; const tRow={};
+        tCols.forEach((c,i)=>tRow[c]=tlr[0].values[0][i]);
+        if (tRow.days_remaining <= 10) {
+          document.getElementById('token-alert-msg').textContent =
+            `LinkedIn token expires in ${tRow.days_remaining} day(s) — re-authorize now! (expires ${tRow.expires_at})`;
+          document.getElementById('token-alert').classList.add('show');
+        }
+      }
+    } catch {}
+
+    DB_LOADED = true;
+    document.getElementById('db-badge').textContent = `${allRows.length} posts`;
+    renderStats();
+    renderPendingPanel();
+    renderGallery();
+    renderTable();
+  } catch(err){
+    document.getElementById('db-badge').textContent = 'DB error';
+    toast('Failed to load DB: ' + err.message, 5000);
+  }
+}
+
+// ── Stats ───────────────────────────────────────────────────────────────────
+function renderStats(){
+  document.getElementById('s-total').textContent = allRows.length;
+  document.getElementById('s-posted').textContent = allRows.filter(r=>r.status==='posted').length;
+  document.getElementById('s-pending').textContent = allRows.filter(r=>r.status==='pending').length;
+  document.getElementById('s-failed').textContent = allRows.filter(r=>r.status==='failed').length;
+}
+
+// ── PENDING PANEL ───────────────────────────────────────────────────────────
+function renderPendingPanel(){
+  const cfg = getCfg();
+  const note = document.getElementById('config-note');
+  note.style.display = (cfg.owner && cfg.token) ? 'none' : 'block';
+
+  const container = document.getElementById('pending-content');
+  const pending = allRows.filter(r => r.status === 'pending').sort((a,b) => {
+    const sa = a.scheduled_for || a.created_at;
+    const sb = b.scheduled_for || b.created_at;
+    return sa < sb ? -1 : 1;
+  });
+
+  if (!pending.length) {
+    container.innerHTML = `<div class="no-pending">
+      <h2>No pending posts</h2>
+      <p>The next post will appear here after the 6:00 UTC generation run.<br>
+      You can also trigger it manually: GitHub → Actions → "Generate Daily Post" → Run workflow.</p>
+    </div>`;
+    return;
+  }
+
+  const post = pending[0];
+  const reviewStatus = post.review_status || 'pending';
+  const scheduledFor = post.scheduled_for ? new Date(post.scheduled_for).toLocaleString() : 'Not scheduled';
+  const hashtags = tryParseJson(post.hashtags, []);
+  const imgSrc = post.image_path ? imageUrl(post.image_path) : null;
+  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+      <div>
+        <h2 style="font-size:1.15rem;font-weight:700">Tomorrow's Post <span class="status-pill ${reviewPillClass(reviewStatus)}">${reviewStatus}</span></h2>
+        <div class="schedule-info">Scheduled: ${scheduledFor} · Post ID: ${post.id}</div>
+      </div>
+    </div>
+    <div class="preview-layout">
+      <div>
+        <div class="preview-image-wrap" id="preview-img-wrap">
+          ${imgSrc
+            ? `<img src="${esc(imgSrc)}" alt="Post image" id="preview-img" />`
+            : `<div class="img-placeholder">Image generating…<br>Refresh after the workflow completes.</div>`}
+        </div>
+        <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
+          <div class="card">
+            <div class="card-label">Image topic</div>
+            <div style="font-size:.85rem;color:var(--muted);line-height:1.4">${esc(post.image_prompt || '—')}</div>
+          </div>
+          ${canAct ? `
+          <div class="card">
+            <div class="card-label">Regenerate Image</div>
+            <textarea class="notes" id="regen-notes" placeholder="Describe what to change: e.g. 'use a football field aerial view, electric blue tones, no text on image'"></textarea>
+            <div style="margin-top:.6rem;display:flex;gap:.5rem">
+              <button class="btn btn-warn" onclick="regenImage(${post.id})">🔄 Regenerate Image</button>
+            </div>
+          </div>` : ''}
+        </div>
+      </div>
+
+      <div class="preview-text-wrap">
+        <div class="card" style="flex:1">
+          <div class="card-label" style="display:flex;align-items:center;justify-content:space-between">
+            Post text
+            ${canAct ? `<button class="btn btn-ghost btn-sm" onclick="saveBodyEdit(${post.id})">💾 Save edits</button>` : ''}
+          </div>
+          <textarea class="post-body" id="body-edit">${esc(post.body || '')}</textarea>
+          <div class="hashtags-row" style="margin-top:.6rem">
+            ${hashtags.map(h=>`<span class="hashtag">${esc(h)}</span>`).join('')}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Angle / topic</div>
+          <div style="font-size:.9rem;font-weight:600">${esc(post.angle || '—')}</div>
+        </div>
+
+        ${canAct ? `
+        <div class="action-row">
+          <button class="btn btn-success" onclick="approvePost(${post.id})">✅ Approve & Schedule</button>
+          <button class="btn btn-danger" onclick="deletePost(${post.id})">🗑 Delete Post</button>
+        </div>
+        <p style="font-size:.78rem;color:var(--muted);margin-top:.25rem">
+          If no action taken, this post auto-publishes at its scheduled time.
+        </p>` : `
+        <div style="font-size:.85rem;color:var(--muted);background:#f9fafb;border-radius:8px;padding:.85rem">
+          Configure GitHub settings to enable actions. Post will auto-publish at scheduled time.
+        </div>`}
+      </div>
+    </div>`;
+}
+
+function reviewPillClass(s){
+  return s==='approved'?'pill-approved':s==='rejected'?'pill-rejected':s==='posted'?'pill-posted':'pill-pending';
+}
+
+function imageUrl(filePath) {
+  if (!filePath) return null;
+  // Convert absolute Windows path to a relative URL from dashboard/
+  const norm = filePath.replace(/\\/g, '/');
+  const idx = norm.lastIndexOf('/data/images/');
+  if (idx !== -1) return '..' + norm.slice(idx);
+  const fname = norm.split('/').pop();
+  return `../data/images/${fname}`;
+}
+
+// ── GitHub Actions trigger ──────────────────────────────────────────────────
+async function triggerWorkflow(workflowFile, inputs) {
+  const cfg = getCfg();
+  if (!cfg.owner || !cfg.repo || !cfg.token) {
+    toast('⚠️ Configure GitHub settings first', 4000); return false;
+  }
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${workflowFile}/dispatches`;
+  const body = { ref: 'main', inputs };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+    body: JSON.stringify(body),
+  });
+  return res.ok || res.status === 204;
+}
+
+async function writePendingCommand(postId, data) {
+  const cfg = getCfg();
+  if (!cfg.owner || !cfg.repo || !cfg.token) return false;
+  const content = JSON.stringify({ post_id: postId, ...data }, null, 2);
+  const b64 = btoa(unescape(encodeURIComponent(content)));
+  const path = 'data/pending-command.json';
+  // Check if file exists to get its SHA
+  let sha = null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
+      headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json' }
+    });
+    if (r.ok) { const j = await r.json(); sha = j.sha; }
+  } catch {}
+  const body = { message: `dashboard: command for post ${postId}`, content: b64 };
+  if (sha) body.sha = sha;
+  const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+    body: JSON.stringify(body),
+  });
+  return res.ok || res.status === 201;
+}
+
+async function approvePost(postId) {
+  if (!confirm('Approve this post? It will publish at its scheduled time.')) return;
+  toast('Approving…');
+  const ok = await writePendingCommand(postId, { action: 'approve' });
+  toast(ok ? '✅ Approved — will auto-publish at scheduled time' : '❌ Failed to write command', 4000);
+}
+
+async function deletePost(postId) {
+  if (!confirm('Delete this post? It will not be published.')) return;
+  toast('Deleting…');
+  const ok = await writePendingCommand(postId, { action: 'delete' });
+  toast(ok ? '🗑 Post marked for deletion' : '❌ Failed to write command', 4000);
+}
+
+async function saveBodyEdit(postId) {
+  const newBody = document.getElementById('body-edit').value.trim();
+  if (!newBody) return;
+  toast('Saving edited text…');
+  const ok = await writePendingCommand(postId, { action: 'edit', body: newBody });
+  toast(ok ? '💾 Edited text saved — will be used at publish time' : '❌ Failed to save', 4000);
+}
+
+async function regenImage(postId) {
+  const notes = document.getElementById('regen-notes').value.trim();
+  if (!confirm(`Regenerate the image for post ${postId}?\n${notes ? 'Notes: ' + notes : 'No notes — will use original prompt.'}`)) return;
+  toast('Triggering image regeneration…');
+  const inputs = { post_id: String(postId) };
+  if (notes) inputs.notes = notes;
+  const ok = await triggerWorkflow('regenerate-image.yml', inputs);
+  toast(ok ? '🔄 Image regeneration queued — refresh in ~2 min' : '❌ Failed to trigger workflow', 5000);
+}
+
+// ── GALLERY ─────────────────────────────────────────────────────────────────
+function renderGallery() {
+  const filter = document.getElementById('gallery-filter').value;
+  const rows = allRows.filter(r => {
+    if (filter && r.status !== filter) return false;
+    return !!r.image_path;
+  });
+  document.getElementById('gallery-count').textContent = `${rows.length} image${rows.length !== 1 ? 's' : ''}`;
+  document.getElementById('gallery-grid').innerHTML = rows.map(r => {
+    const src = imageUrl(r.image_path);
+    const date = (r.posted_at || r.created_at || '').split('T')[0];
+    const angle = (r.angle || '—').substring(0, 60);
+    const urnHref = r.post_urn ? 'https://www.linkedin.com/feed/' : null;
+    return `<div class="gallery-card">
+      <div class="gc-img">
+        ${src ? `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
+      </div>
+      <div class="gc-body">
+        <div class="gc-date">${date}</div>
+        <div class="gc-angle">${esc(angle)}</div>
+        <div class="gc-footer">
+          <span class="status status-${r.status}">${r.status}</span>
+          ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank">View on LinkedIn ↗</a>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('') || '<p style="color:var(--muted);padding:2rem">No images found.</p>';
+}
+
+// ── ALL POSTS TABLE ──────────────────────────────────────────────────────────
+function renderTable() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const filterStatus = document.getElementById('filter-status').value;
+  const rows = allRows.filter(r => {
+    if (filterStatus && r.status !== filterStatus) return false;
+    if (search) {
+      const hay = `${r.body||''} ${r.angle||''} ${r.post_urn||''}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+  document.getElementById('posts-body').innerHTML = rows.map(r => {
+    const date = (r.created_at||'').split('T')[0];
+    const body = esc((r.body||'').substring(0,80) + ((r.body||'').length>80?'…':''));
+    const angle = esc((r.angle||'—').substring(0,45));
+    const urnLink = r.post_urn
+      ? `<a class="urn-link" href="https://www.linkedin.com/feed/" target="_blank" title="${esc(r.post_urn)}">View ↗</a>` : '—';
+    const deleteBtn = r.status === 'pending'
+      ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : '';
+    return `<tr>
+      <td>${r.id}</td>
+      <td><span class="status status-${r.status}">${r.status}</span></td>
+      <td>${date}</td>
+      <td>${angle}</td>
+      <td class="body-cell" title="${esc(r.body||'')}">${body}</td>
+      <td>${urnLink}</td>
+      <td>${deleteBtn}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No posts found</td></tr>`;
+}
+
+async function deletePostTable(postId) {
+  if (!confirm(`Mark post ${postId} as deleted?`)) return;
+  const ok = await writePendingCommand(postId, { action: 'delete' });
+  toast(ok ? '🗑 Deletion command sent' : '❌ Failed — check settings', 4000);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function tryParseJson(s, fallback){ try{return JSON.parse(s);}catch{return fallback;} }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+loadDb();
+</script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+{"runAt":"2026-06-28T18:17:44.270Z","status":"aborted","reason":"TOKEN_INVALID","tokenStatus":{"valid":false,"expiresAt":null,"daysRemaining":0,"alertNeeded":true,"reason":"NO_TOKEN"}}
+{"runAt":"2026-06-28T18:36:26.012Z","status":"success","postId":2,"postUrn":"urn:li:share:7477067266728308736","daysUntilExpiry":59}
