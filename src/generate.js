@@ -17,6 +17,8 @@ const fs = require('fs');
 const { generateContent } = require('./content');
 const { buildImage } = require('./image');
 const { ops: db } = require('./db');
+const { isPaused } = require('./pause');
+const { getActiveTemplate } = require('./templates');
 
 const IMAGES_DIR = path.join(__dirname, '..', 'data', 'images');
 
@@ -27,6 +29,11 @@ function getArg(flag) {
 const hasFlag = flag => process.argv.includes(flag);
 
 async function main() {
+  if (isPaused()) {
+    console.log('[generate] Pipeline paused — skipping generation.');
+    return;
+  }
+
   const postIdArg = getArg('--post-id');
   const notes = getArg('--notes');
   const imageOnly = hasFlag('--image-only');
@@ -42,9 +49,12 @@ async function main() {
     console.log(`[generate] Regenerating image for post id=${postId}`);
     if (notes) console.log(`[generate] Notes: ${notes}`);
 
-    const imagePrompt = notes
-      ? `${post.image_prompt}. Additional guidance: ${notes}`
-      : post.image_prompt;
+    const template = getActiveTemplate();
+    const imagePrompt = [
+      post.image_prompt,
+      notes ? `Additional guidance: ${notes}` : null,
+      template ? `Style reference: ${template.styleNotes}` : null,
+    ].filter(Boolean).join('. ');
 
     const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
     const imagePath = await buildImage({

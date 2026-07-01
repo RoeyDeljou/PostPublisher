@@ -7,7 +7,10 @@
  * If review_status='approved' or 'pending' (default) → publishes.
  * If review_status='rejected' → skips and logs.
  *
- * Also reads data/pending-command.json for last-minute overrides from the dashboard.
+ * Also reads data/pending-command.json for a last-minute body-text edit from the dashboard
+ * (delete/approve/reject are applied immediately via update-post-status.yml instead, since
+ * those are simple enum-like fields well suited to workflow_dispatch inputs — a body edit's
+ * arbitrary-length, quote-containing text is not).
  */
 
 const path = require('path');
@@ -15,6 +18,8 @@ const fs = require('fs');
 const { checkToken, verifyPostLive, logRun } = require('./monitor');
 const { registerImageUpload, uploadImage, createUgcPost } = require('./linkedin');
 const { ops: db } = require('./db');
+const { isPaused } = require('./pause');
+const { isPersonalPostingAllowed } = require('./settings');
 
 const COMMAND_FILE = path.join(__dirname, '..', 'data', 'pending-command.json');
 
@@ -42,6 +47,12 @@ function clearCommand() {
 async function run() {
   console.log(`[run] Starting at ${new Date().toISOString()}`);
 
+  if (isPaused()) {
+    console.log('[run] Pipeline paused — skipping publish.');
+    logRun({ status: 'skipped', reason: 'PAUSED' });
+    process.exit(0);
+  }
+
   // ── 1. Token check ──────────────────────────────────────────────────────────
   const tokenStatus = checkToken();
   if (!tokenStatus.valid) {
@@ -57,6 +68,13 @@ async function run() {
   const LINKEDIN_PERSON_URN = requireEnv('LINKEDIN_PERSON_URN');
   const AUTHOR_URN = process.env.LINKEDIN_ORG_URN || LINKEDIN_PERSON_URN;
   console.log(`[run] Author: ${AUTHOR_URN}`);
+
+  const isPersonalTarget = AUTHOR_URN === LINKEDIN_PERSON_URN;
+  if (isPersonalTarget && !isPersonalPostingAllowed()) {
+    console.log('[run] Publish target is the personal profile, but personal-profile posting is not allowed (dashboard checkbox unchecked). Skipping.');
+    logRun({ status: 'skipped', reason: 'PERSONAL_POSTING_NOT_ALLOWED' });
+    process.exit(0);
+  }
 
   // ── 2. Load dashboard command (if any) ─────────────────────────────────────
   const command = loadCommand();

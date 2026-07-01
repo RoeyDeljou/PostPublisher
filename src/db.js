@@ -78,7 +78,7 @@ const ops = {
       assetUrn: 'asset_urn', postedAt: 'posted_at', error: 'error',
       imagePath: 'image_path', approvedAt: 'approved_at',
       regenerationNotes: 'regeneration_notes', body: 'body',
-      engagementText: 'engagement_text',
+      engagementText: 'engagement_text', scheduledFor: 'scheduled_for',
     };
     const allowed = Object.values(fieldMap);
     const setClauses = [];
@@ -121,6 +121,7 @@ const ops = {
     const db = openDb();
     const row = db.prepare(
       `SELECT * FROM posts WHERE status = 'pending' AND review_status != 'rejected'
+       AND (scheduled_for IS NULL OR date(scheduled_for) <= date('now'))
        ORDER BY scheduled_for ASC LIMIT 1`
     ).get();
     db.close();

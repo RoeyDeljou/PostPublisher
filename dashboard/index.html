@@ -19,6 +19,8 @@
     header h1 span.accent{color:var(--accent)}
     .header-right{display:flex;align-items:center;gap:.75rem}
     .db-badge{background:rgba(0,200,150,.15);border:1px solid var(--accent);color:var(--accent);border-radius:20px;padding:.25rem .85rem;font-size:.78rem;font-weight:600}
+    .personal-posting-toggle{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:rgba(255,255,255,.85);cursor:pointer;background:rgba(255,255,255,.06);border-radius:20px;padding:.35rem .85rem}
+    .personal-posting-toggle input{cursor:pointer}
 
     /* Nav tabs */
     nav{background:var(--card);border-bottom:2px solid var(--border);padding:0 2rem;display:flex;gap:0}
@@ -26,9 +28,10 @@
     nav button.active{color:var(--primary);border-bottom-color:var(--primary)}
     nav button:hover:not(.active){color:var(--text)}
 
-    /* Alert banner */
+    /* Alert banners */
     .alert-banner{display:none;background:#fef3c7;border-left:5px solid var(--warn);padding:.9rem 1.5rem;font-size:.9rem}
     .alert-banner.show{display:flex;align-items:center;gap:.75rem}
+    .alert-banner.pause{background:#fee2e2;border-left-color:var(--danger)}
 
     /* Main */
     main{max-width:1300px;margin:0 auto;padding:1.5rem}
@@ -72,6 +75,8 @@
     .notes-wrap.open{display:block}
     textarea.notes{width:100%;height:80px;border:1.5px solid var(--border);border-radius:8px;padding:.6rem;font-size:.85rem;resize:vertical;font-family:inherit}
     textarea.notes:focus{outline:none;border-color:var(--warn)}
+    input.field-input{width:100%;padding:.6rem .85rem;border:1.5px solid var(--border);border-radius:8px;font-size:.88rem;font-family:inherit}
+    input.field-input:focus{outline:none;border-color:var(--primary)}
     .status-pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .75rem;border-radius:20px;font-size:.78rem;font-weight:700}
     .pill-pending{background:#fef3c7;color:#92400e}
     .pill-approved{background:#d1fae5;color:#065f46}
@@ -82,17 +87,17 @@
     .schedule-info{font-size:.82rem;color:var(--muted);margin-top:.4rem}
     .github-config-note{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:.85rem 1rem;font-size:.82rem;margin-bottom:1rem;color:#1e40af}
 
-    /* ── GALLERY PANEL ──────────────────────────────────────────── */
+    /* ── GALLERY / TEMPLATES PANEL ──────────────────────────────── */
     .gallery-controls{display:flex;gap:.75rem;margin-bottom:1.25rem;align-items:center;flex-wrap:wrap}
     .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem}
     .gallery-card{background:var(--card);border-radius:var(--radius);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);transition:box-shadow .15s}
     .gallery-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
-    .gallery-card .gc-img{aspect-ratio:1;overflow:hidden;background:var(--strip);position:relative}
+    .gallery-card .gc-img{aspect-ratio:1;overflow:hidden;background:var(--strip);position:relative;cursor:pointer}
     .gallery-card .gc-img img{width:100%;height:100%;object-fit:cover;display:block}
     .gallery-card .gc-body{padding:.85rem 1rem}
     .gallery-card .gc-date{font-size:.75rem;color:var(--muted);margin-bottom:.3rem}
     .gallery-card .gc-angle{font-size:.85rem;font-weight:600;color:var(--text);margin-bottom:.4rem;line-height:1.3}
-    .gallery-card .gc-footer{display:flex;align-items:center;justify-content:space-between;margin-top:.5rem}
+    .gallery-card .gc-footer{display:flex;align-items:center;justify-content:space-between;margin-top:.5rem;gap:.5rem}
 
     /* ── ALL POSTS PANEL ────────────────────────────────────────── */
     .table-controls{display:flex;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap;align-items:center}
@@ -134,6 +139,11 @@
   <h1>Elite Sports AI Forge <span class="accent">—</span> Post Dashboard</h1>
   <div class="header-right">
     <span class="db-badge" id="db-badge">Loading…</span>
+    <label class="personal-posting-toggle" title="Off by default — the pipeline will not publish to your personal LinkedIn profile until this is checked.">
+      <input type="checkbox" id="personal-posting-checkbox" onchange="togglePersonalPosting(this)" />
+      Allow personal-profile posting
+    </label>
+    <button class="btn btn-danger btn-sm" id="pause-toggle-btn" onclick="togglePause()">⏸ Pause Pipeline</button>
     <button class="btn btn-ghost btn-sm" onclick="openSettings()">⚙ Settings</button>
     <button class="btn btn-primary btn-sm" onclick="loadDb()">↻ Refresh</button>
   </div>
@@ -142,11 +152,15 @@
 <div class="alert-banner" id="token-alert">
   ⚠️ <strong id="token-alert-msg"></strong>
 </div>
+<div class="alert-banner pause" id="pause-banner">
+  ⏸️ <strong>Pipeline paused — no new posts will be generated or published until you resume.</strong>
+</div>
 
 <nav>
   <button class="active" onclick="showTab('pending',this)">📋 Next Post</button>
   <button onclick="showTab('gallery',this)">🖼 Gallery</button>
   <button onclick="showTab('all',this)">📊 All Posts</button>
+  <button onclick="showTab('templates',this)">🎨 Templates</button>
 </nav>
 
 <main>
@@ -173,6 +187,8 @@
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
         <option value="posted">Posted</option>
+        <option value="failed">Failed</option>
+        <option value="deleted">Deleted</option>
       </select>
       <span id="gallery-count" style="color:var(--muted);font-size:.85rem"></span>
     </div>
@@ -193,10 +209,33 @@
     </div>
     <table id="posts-table">
       <thead><tr>
-        <th>ID</th><th>Status</th><th>Date</th><th>Topic</th><th>Preview</th><th>LinkedIn</th><th>Actions</th>
+        <th>ID</th><th>Status</th><th>Date</th><th>Scheduled</th><th>Topic</th><th>Preview</th><th>LinkedIn</th><th>Actions</th>
       </tr></thead>
       <tbody id="posts-body"></tbody>
     </table>
+  </div>
+
+  <!-- ── TAB: TEMPLATES ─────────────────────────────────────────────── -->
+  <div class="panel" id="panel-templates">
+    <div class="github-config-note" id="templates-config-note" style="display:none">
+      ⚙️ Set your GitHub token in <strong>Settings</strong> to add or manage templates.
+    </div>
+    <div class="card" id="templates-form-wrap" style="margin-bottom:1.25rem;display:none">
+      <div class="card-label">Add Style Template</div>
+      <p style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem;line-height:1.4">
+        Pollinations (the free image generator this project uses) can't clone a reference image —
+        so the image you upload here is stored only for your own reference in this gallery.
+        The <strong>style notes</strong> text is what actually matters: it gets woven into future
+        image prompts so new posts trend toward that look. Only one template can be active at a time.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:.6rem">
+        <input type="text" class="field-input" id="tmpl-name" placeholder="Template name, e.g. 'Neon stadium aerials'" />
+        <textarea class="notes" id="tmpl-notes" placeholder="Style notes, e.g. 'dark navy background, glowing cyan grid lines, aerial stadium silhouettes, no text'" style="height:70px"></textarea>
+        <input type="file" id="tmpl-file" accept="image/*" />
+        <div><button class="btn btn-primary btn-sm" onclick="addTemplate()">➕ Add Template</button></div>
+      </div>
+    </div>
+    <div class="gallery-grid" id="templates-grid"></div>
   </div>
 </main>
 
@@ -205,7 +244,7 @@
   <div class="modal">
     <h2>⚙️ GitHub Settings</h2>
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
-      Required for Approve / Regenerate actions. Your token is stored only in this browser (localStorage).
+      Required for Approve / Delete / Reschedule / Template / Pause actions. Your token is stored only in this browser (localStorage).
       Create a fine-grained PAT with <strong>Actions: write</strong> and <strong>Contents: write</strong> permissions.
     </p>
     <div class="field"><label>GitHub Owner (username or org)</label>
@@ -228,6 +267,9 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let allRows = [];
 let DB_LOADED = false;
+let templatesData = [];
+let pauseState = { paused: false };
+let settingsState = { allowPersonalPosting: false };
 
 // ── Settings ───────────────────────────────────────────────────────────────
 function getCfg() {
@@ -254,6 +296,7 @@ function saveSettings(){
   closeSettings();
   toast('Settings saved ✓');
   renderPendingPanel();
+  renderTemplates();
 }
 
 // ── Toast ───────────────────────────────────────────────────────────────────
@@ -271,10 +314,13 @@ function showTab(name, btn){
   btn.classList.add('active');
 }
 
-// ── DB Load ─────────────────────────────────────────────────────────────────
-// Works both locally (served from root: /data/posts.db) and on GitHub Pages (../data/posts.db)
-const DB_URL = window.location.pathname.includes('/dashboard/') ? '../data/posts.db' : '/data/posts.db';
+// ── Data URL helper ──────────────────────────────────────────────────────────
+// Works both locally (served from root) and on GitHub Pages (served from /dashboard/)
+const IS_GH_PAGES = window.location.pathname.includes('/dashboard/');
+function dataUrl(relPath){ return (IS_GH_PAGES ? '../' : '/') + relPath.replace(/^\/+/, ''); }
+const DB_URL = dataUrl('data/posts.db');
 
+// ── DB Load ─────────────────────────────────────────────────────────────────
 async function loadDb(){
   document.getElementById('db-badge').textContent = 'Loading…';
   try {
@@ -350,6 +396,7 @@ function renderPendingPanel(){
   const post = pending[0];
   const reviewStatus = post.review_status || 'pending';
   const scheduledFor = post.scheduled_for ? new Date(post.scheduled_for).toLocaleString() : 'Not scheduled';
+  const scheduledDateValue = post.scheduled_for ? String(post.scheduled_for).split('T')[0] : '';
   const hashtags = tryParseJson(post.hashtags, []);
   const imgSrc = post.image_path ? imageUrl(post.image_path) : null;
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
@@ -380,6 +427,14 @@ function renderPendingPanel(){
             <div style="margin-top:.6rem;display:flex;gap:.5rem">
               <button class="btn btn-warn" onclick="regenImage(${post.id})">🔄 Regenerate Image</button>
             </div>
+          </div>
+          <div class="card">
+            <div class="card-label">Reschedule</div>
+            <p style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">Publishes are once daily at 08:00 UTC — pick which day.</p>
+            <input type="date" class="field-input" id="reschedule-date" value="${esc(scheduledDateValue)}" />
+            <div style="margin-top:.6rem">
+              <button class="btn btn-warn" onclick="reschedulePost(${post.id})">📅 Reschedule</button>
+            </div>
           </div>` : ''}
         </div>
       </div>
@@ -404,6 +459,7 @@ function renderPendingPanel(){
         ${canAct ? `
         <div class="action-row">
           <button class="btn btn-success" onclick="approvePost(${post.id})">✅ Approve & Schedule</button>
+          <button class="btn btn-ghost" onclick="rejectPost(${post.id})">🚫 Reject</button>
           <button class="btn btn-danger" onclick="deletePost(${post.id})">🗑 Delete Post</button>
         </div>
         <p style="font-size:.78rem;color:var(--muted);margin-top:.25rem">
@@ -430,7 +486,11 @@ function imageUrl(filePath) {
   return `../data/images/${fname}`;
 }
 
-// ── GitHub Actions trigger ──────────────────────────────────────────────────
+function linkedinUrl(postUrn) {
+  return postUrn ? `https://www.linkedin.com/feed/update/${encodeURIComponent(postUrn)}/` : null;
+}
+
+// ── GitHub Actions / Contents API helpers ────────────────────────────────────
 async function triggerWorkflow(workflowFile, inputs) {
   const cfg = getCfg();
   if (!cfg.owner || !cfg.repo || !cfg.token) {
@@ -446,13 +506,14 @@ async function triggerWorkflow(workflowFile, inputs) {
   return res.ok || res.status === 204;
 }
 
-async function writePendingCommand(postId, data) {
+// Generic "commit a file to the repo" helper (get SHA if it exists, then PUT).
+// content: string (text) or base64 string when isBase64=true.
+async function putRepoFile(path, content, message, isBase64=false) {
   const cfg = getCfg();
-  if (!cfg.owner || !cfg.repo || !cfg.token) return false;
-  const content = JSON.stringify({ post_id: postId, ...data }, null, 2);
-  const b64 = btoa(unescape(encodeURIComponent(content)));
-  const path = 'data/pending-command.json';
-  // Check if file exists to get its SHA
+  if (!cfg.owner || !cfg.repo || !cfg.token) {
+    toast('⚠️ Configure GitHub settings first', 4000); return false;
+  }
+  const b64 = isBase64 ? content : btoa(unescape(encodeURIComponent(content)));
   let sha = null;
   try {
     const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
@@ -460,7 +521,7 @@ async function writePendingCommand(postId, data) {
     });
     if (r.ok) { const j = await r.json(); sha = j.sha; }
   } catch {}
-  const body = { message: `dashboard: command for post ${postId}`, content: b64 };
+  const body = { message, content: b64 };
   if (sha) body.sha = sha;
   const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
     method: 'PUT',
@@ -470,18 +531,50 @@ async function writePendingCommand(postId, data) {
   return res.ok || res.status === 201;
 }
 
+async function deleteRepoFile(path, message) {
+  const cfg = getCfg();
+  if (!cfg.owner || !cfg.repo || !cfg.token) return false;
+  let sha = null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
+      headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json' }
+    });
+    if (!r.ok) return true; // already gone
+    const j = await r.json(); sha = j.sha;
+  } catch { return false; }
+  const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+    body: JSON.stringify({ message, sha }),
+  });
+  return res.ok;
+}
+
+async function writePendingCommand(postId, data) {
+  const content = JSON.stringify({ post_id: postId, ...data }, null, 2);
+  return putRepoFile('data/pending-command.json', content, `dashboard: command for post ${postId}`);
+}
+
+// ── Review actions (immediate DB writes via update-post-status.yml) ─────────
 async function approvePost(postId) {
   if (!confirm('Approve this post? It will publish at its scheduled time.')) return;
   toast('Approving…');
-  const ok = await writePendingCommand(postId, { action: 'approve' });
-  toast(ok ? '✅ Approved — will auto-publish at scheduled time' : '❌ Failed to write command', 4000);
+  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'approved' });
+  toast(ok ? '✅ Approved — will auto-publish at scheduled time' : '❌ Failed to trigger workflow', 4000);
+}
+
+async function rejectPost(postId) {
+  if (!confirm('Reject this post? It will not publish unless re-approved.')) return;
+  toast('Rejecting…');
+  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'rejected' });
+  toast(ok ? '🚫 Rejected — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
 }
 
 async function deletePost(postId) {
   if (!confirm('Delete this post? It will not be published.')) return;
   toast('Deleting…');
-  const ok = await writePendingCommand(postId, { action: 'delete' });
-  toast(ok ? '🗑 Post marked for deletion' : '❌ Failed to write command', 4000);
+  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
+  toast(ok ? '🗑 Post deleted — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
 }
 
 async function saveBodyEdit(postId) {
@@ -490,6 +583,16 @@ async function saveBodyEdit(postId) {
   toast('Saving edited text…');
   const ok = await writePendingCommand(postId, { action: 'edit', body: newBody });
   toast(ok ? '💾 Edited text saved — will be used at publish time' : '❌ Failed to save', 4000);
+}
+
+async function reschedulePost(postId) {
+  const date = document.getElementById('reschedule-date').value;
+  if (!date) { toast('⚠️ Pick a date first', 3000); return; }
+  const iso = `${date}T08:00:00Z`;
+  if (!confirm(`Reschedule post ${postId} to ${date} (publishes at 08:00 UTC that day)?`)) return;
+  toast('Rescheduling…');
+  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), scheduled_for: iso });
+  toast(ok ? '📅 Reschedule queued — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
 }
 
 async function regenImage(postId) {
@@ -502,9 +605,18 @@ async function regenImage(postId) {
   toast(ok ? '🔄 Image regeneration queued — refresh in ~2 min' : '❌ Failed to trigger workflow', 5000);
 }
 
+async function deletePostTable(postId) {
+  if (!confirm(`Mark post ${postId} as deleted?`)) return;
+  toast('Deleting…');
+  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
+  toast(ok ? '🗑 Deletion queued — refresh in ~1 min' : '❌ Failed — check settings', 4000);
+}
+
 // ── GALLERY ─────────────────────────────────────────────────────────────────
 function renderGallery() {
   const filter = document.getElementById('gallery-filter').value;
+  const cfg = getCfg();
+  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
     if (filter && r.status !== filter) return false;
     return !!r.image_path;
@@ -514,9 +626,10 @@ function renderGallery() {
     const src = imageUrl(r.image_path);
     const date = (r.posted_at || r.created_at || '').split('T')[0];
     const angle = (r.angle || '—').substring(0, 60);
-    const urnHref = r.post_urn ? 'https://www.linkedin.com/feed/' : null;
+    const urnHref = linkedinUrl(r.post_urn);
+    const canDelete = canAct && (r.status === 'pending' || r.status === 'failed');
     return `<div class="gallery-card">
-      <div class="gc-img">
+      <div class="gc-img" ${src ? `onclick="window.open('${esc(src)}','_blank')"` : ''}>
         ${src ? `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
       </div>
       <div class="gc-body">
@@ -524,7 +637,10 @@ function renderGallery() {
         <div class="gc-angle">${esc(angle)}</div>
         <div class="gc-footer">
           <span class="status status-${r.status}">${r.status}</span>
-          ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank">View on LinkedIn ↗</a>` : ''}
+          <div style="display:flex;gap:.5rem;align-items:center">
+            ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank">View on LinkedIn ↗</a>` : ''}
+            ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : ''}
+          </div>
         </div>
       </div>
     </div>`;
@@ -545,28 +661,171 @@ function renderTable() {
   });
   document.getElementById('posts-body').innerHTML = rows.map(r => {
     const date = (r.created_at||'').split('T')[0];
+    const scheduled = (r.scheduled_for||'').split('T')[0] || '—';
     const body = esc((r.body||'').substring(0,80) + ((r.body||'').length>80?'…':''));
     const angle = esc((r.angle||'—').substring(0,45));
-    const urnLink = r.post_urn
-      ? `<a class="urn-link" href="https://www.linkedin.com/feed/" target="_blank" title="${esc(r.post_urn)}">View ↗</a>` : '—';
+    const urnHref = linkedinUrl(r.post_urn);
+    const urnLink = urnHref
+      ? `<a class="urn-link" href="${urnHref}" target="_blank" title="${esc(r.post_urn)}">View ↗</a>` : '—';
     const deleteBtn = r.status === 'pending'
       ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : '';
     return `<tr>
       <td>${r.id}</td>
       <td><span class="status status-${r.status}">${r.status}</span></td>
       <td>${date}</td>
+      <td>${scheduled}</td>
       <td>${angle}</td>
       <td class="body-cell" title="${esc(r.body||'')}">${body}</td>
       <td>${urnLink}</td>
       <td>${deleteBtn}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No posts found</td></tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem">No posts found</td></tr>`;
 }
 
-async function deletePostTable(postId) {
-  if (!confirm(`Mark post ${postId} as deleted?`)) return;
-  const ok = await writePendingCommand(postId, { action: 'delete' });
-  toast(ok ? '🗑 Deletion command sent' : '❌ Failed — check settings', 4000);
+// ── TEMPLATES ─────────────────────────────────────────────────────────────────
+async function loadTemplates() {
+  try {
+    const resp = await fetch(dataUrl('data/templates.json') + '?t=' + Date.now());
+    templatesData = resp.ok ? await resp.json() : [];
+  } catch { templatesData = []; }
+  renderTemplates();
+}
+
+function renderTemplates() {
+  const cfg = getCfg();
+  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
+  document.getElementById('templates-config-note').style.display = canAct ? 'none' : 'block';
+  document.getElementById('templates-form-wrap').style.display = canAct ? 'block' : 'none';
+  const grid = document.getElementById('templates-grid');
+  grid.innerHTML = templatesData.map(t => `
+    <div class="gallery-card">
+      <div class="gc-img" ${t.imagePath ? `onclick="window.open('${esc(dataUrl(t.imagePath))}','_blank')"` : ''}>
+        ${t.imagePath ? `<img src="${esc(dataUrl(t.imagePath))}" alt="${esc(t.name)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
+      </div>
+      <div class="gc-body">
+        <div class="gc-angle">${esc(t.name)}</div>
+        <div style="font-size:.8rem;color:var(--muted);margin:.4rem 0;line-height:1.4">${esc(t.styleNotes)}</div>
+        <div class="gc-footer">
+          ${t.active ? `<span class="status-pill pill-approved">Active</span>` : (canAct ? `<button class="btn btn-ghost btn-sm" onclick="activateTemplate('${esc(t.id)}')">Activate</button>` : `<span></span>`)}
+          ${canAct ? `<button class="btn btn-danger btn-sm" onclick="deleteTemplate('${esc(t.id)}')">Delete</button>` : ''}
+        </div>
+      </div>
+    </div>`).join('') || '<p style="color:var(--muted);padding:2rem">No templates yet. Add one above.</p>';
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addTemplate() {
+  const name = document.getElementById('tmpl-name').value.trim();
+  const styleNotes = document.getElementById('tmpl-notes').value.trim();
+  const fileInput = document.getElementById('tmpl-file');
+  const file = fileInput.files[0];
+  if (!name || !styleNotes || !file) { toast('⚠️ Name, style notes, and an image are all required', 4000); return; }
+  toast('Uploading template…');
+  const id = 'tmpl_' + Date.now();
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+  const imagePath = `data/templates/${id}.${ext}`;
+  try {
+    const b64 = await fileToBase64(file);
+    const imgOk = await putRepoFile(imagePath, b64, `dashboard: add template image ${id}`, true);
+    if (!imgOk) throw new Error('image upload failed');
+    const resp = await fetch(dataUrl('data/templates.json') + '?t=' + Date.now());
+    const current = resp.ok ? await resp.json() : [];
+    current.push({ id, name, styleNotes, imagePath, active: false, createdAt: new Date().toISOString() });
+    const ok = await putRepoFile('data/templates.json', JSON.stringify(current, null, 2), `dashboard: add template ${name}`);
+    toast(ok ? '✅ Template added — refresh in ~30s' : '❌ Failed to save manifest', 4000);
+    document.getElementById('tmpl-name').value = '';
+    document.getElementById('tmpl-notes').value = '';
+    fileInput.value = '';
+  } catch (err) {
+    toast('❌ Failed: ' + err.message, 5000);
+  }
+}
+
+async function activateTemplate(id) {
+  toast('Activating…');
+  const resp = await fetch(dataUrl('data/templates.json') + '?t=' + Date.now());
+  const current = resp.ok ? await resp.json() : [];
+  current.forEach(t => { t.active = (t.id === id); });
+  const ok = await putRepoFile('data/templates.json', JSON.stringify(current, null, 2), `dashboard: activate template ${id}`);
+  toast(ok ? '✅ Activated — new images will trend toward this style' : '❌ Failed', 4000);
+}
+
+async function deleteTemplate(id) {
+  if (!confirm('Delete this template?')) return;
+  toast('Deleting…');
+  const resp = await fetch(dataUrl('data/templates.json') + '?t=' + Date.now());
+  const current = resp.ok ? await resp.json() : [];
+  const entry = current.find(t => t.id === id);
+  const remaining = current.filter(t => t.id !== id);
+  const ok = await putRepoFile('data/templates.json', JSON.stringify(remaining, null, 2), `dashboard: delete template ${id}`);
+  if (ok && entry && entry.imagePath) await deleteRepoFile(entry.imagePath, `dashboard: delete template image ${id}`);
+  toast(ok ? '🗑 Template deleted' : '❌ Failed', 4000);
+}
+
+// ── PAUSE / KILL SWITCH ───────────────────────────────────────────────────────
+async function loadPauseState() {
+  try {
+    const resp = await fetch(dataUrl('data/pause.json') + '?t=' + Date.now());
+    pauseState = resp.ok ? await resp.json() : { paused: false };
+  } catch { pauseState = { paused: false }; }
+  renderPauseUi();
+}
+
+function renderPauseUi() {
+  const btn = document.getElementById('pause-toggle-btn');
+  const banner = document.getElementById('pause-banner');
+  if (pauseState.paused) {
+    btn.textContent = '▶ Resume Pipeline';
+    btn.className = 'btn btn-success btn-sm';
+    banner.classList.add('show');
+  } else {
+    btn.textContent = '⏸ Pause Pipeline';
+    btn.className = 'btn btn-danger btn-sm';
+    banner.classList.remove('show');
+  }
+}
+
+async function togglePause() {
+  const goingToPause = !pauseState.paused;
+  const msg = goingToPause
+    ? 'Pause the pipeline? No new posts will be generated or published until you resume. Takes effect on the next scheduled run.'
+    : 'Resume the pipeline? Normal daily automation will continue from the next scheduled run.';
+  if (!confirm(msg)) return;
+  toast(goingToPause ? 'Pausing…' : 'Resuming…');
+  const newState = { paused: goingToPause, pausedAt: new Date().toISOString(), pausedBy: 'dashboard' };
+  const ok = await putRepoFile('data/pause.json', JSON.stringify(newState, null, 2), `dashboard: ${goingToPause ? 'pause' : 'resume'} pipeline`);
+  if (ok) { pauseState = newState; renderPauseUi(); }
+  toast(ok ? (goingToPause ? '⏸ Paused' : '▶ Resumed') : '❌ Failed to write pause state', 4000);
+}
+
+// ── PERSONAL-PROFILE POSTING GATE ────────────────────────────────────────────
+async function loadSettingsState() {
+  try {
+    const resp = await fetch(dataUrl('data/settings.json') + '?t=' + Date.now());
+    settingsState = resp.ok ? await resp.json() : { allowPersonalPosting: false };
+  } catch { settingsState = { allowPersonalPosting: false }; }
+  document.getElementById('personal-posting-checkbox').checked = !!settingsState.allowPersonalPosting;
+}
+
+async function togglePersonalPosting(checkboxEl) {
+  const wantAllow = checkboxEl.checked;
+  if (wantAllow && !confirm('Allow the pipeline to publish to your PERSONAL LinkedIn profile (used only when the company page isn\'t configured)? Uncheck this once company-page posting is working.')) {
+    checkboxEl.checked = false;
+    return;
+  }
+  toast(wantAllow ? 'Enabling personal-profile posting…' : 'Disabling personal-profile posting…');
+  const newState = { ...settingsState, allowPersonalPosting: wantAllow };
+  const ok = await putRepoFile('data/settings.json', JSON.stringify(newState, null, 2), `dashboard: ${wantAllow ? 'allow' : 'disallow'} personal-profile posting`);
+  if (ok) { settingsState = newState; } else { checkboxEl.checked = !wantAllow; }
+  toast(ok ? (wantAllow ? '✅ Personal posting allowed' : '🚫 Personal posting disabled') : '❌ Failed to save setting', 4000);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -575,6 +834,9 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 loadDb();
+loadPauseState();
+loadTemplates();
+loadSettingsState();
 </script>
 </body>
 </html>

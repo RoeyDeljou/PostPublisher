@@ -2,6 +2,7 @@
 'use strict';
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { getActiveTemplate } = require('./templates');
 
 const TOPIC_POOL = [
   'AI injury prediction and athlete load management',
@@ -67,11 +68,16 @@ async function generateContent(recentBodies = [], regenerationNotes = null) {
     ? `\n\nSPECIAL INSTRUCTIONS FOR THIS POST:\n${regenerationNotes}`
     : '';
 
+  const template = getActiveTemplate();
+  const styleSection = template
+    ? `\n\nIMAGE STYLE GUIDANCE (apply to imagePrompt):\n${template.styleNotes}`
+    : '';
+
   const userMessage = `Today's date: ${new Date().toISOString().split('T')[0]}
 Scheduled for: ${scheduledFor}
 
 Available topic pool (pick one not used recently):
-${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}${notesSection}
+${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}${notesSection}${styleSection}
 
 Generate the LinkedIn post. Return only JSON.`;
 

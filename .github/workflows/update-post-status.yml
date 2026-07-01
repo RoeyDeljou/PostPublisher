@@ -8,10 +8,19 @@ on:
         required: true
         type: number
       status:
-        description: "New status"
-        required: true
+        description: "New status (leave blank to not change)"
+        required: false
         type: choice
-        options: [deleted, pending, posted, failed]
+        options: ["", deleted, pending, posted, failed]
+      review_status:
+        description: "New review status (leave blank to not change)"
+        required: false
+        type: choice
+        options: ["", pending, approved, rejected]
+      scheduled_for:
+        description: "New scheduled date, e.g. 2026-07-15T08:00:00Z (leave blank to not change)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -23,20 +32,36 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
       - run: npm ci
 
-      - name: Update post status in DB
-        run: |
-          node src/db.js update ${{ inputs.post_id }} '{"status":"${{ inputs.status }}"}'
+      - name: Update post fields in DB
         env:
+          POST_ID: ${{ inputs.post_id }}
+          NEW_STATUS: ${{ inputs.status }}
+          NEW_REVIEW_STATUS: ${{ inputs.review_status }}
+          NEW_SCHEDULED_FOR: ${{ inputs.scheduled_for }}
           NODE_ENV: production
+        run: |
+          node -e '
+            const fields = {};
+            if (process.env.NEW_STATUS) fields.status = process.env.NEW_STATUS;
+            if (process.env.NEW_REVIEW_STATUS) fields.reviewStatus = process.env.NEW_REVIEW_STATUS;
+            if (process.env.NEW_SCHEDULED_FOR) fields.scheduledFor = process.env.NEW_SCHEDULED_FOR;
+            if (Object.keys(fields).length === 0) {
+              console.error("No fields provided (status / review_status / scheduled_for) — nothing to update.");
+              process.exit(1);
+            }
+            const { ops } = require("./src/db.js");
+            const result = ops.update(Number(process.env.POST_ID), fields);
+            console.log(JSON.stringify({ postId: Number(process.env.POST_ID), fields, result }, null, 2));
+          '
 
       - name: Commit updated DB
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/posts.db
-          git diff --staged --quiet || git commit -m "chore: update post ${{ inputs.post_id }} status → ${{ inputs.status }}"
+          git diff --staged --quiet || git commit -m "chore: update post ${{ inputs.post_id }}"
           git push
