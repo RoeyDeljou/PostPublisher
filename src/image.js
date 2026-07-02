@@ -50,7 +50,7 @@ function fetchUrl(url, dest) {
 async function fetchPollinationsBackground(prompt, outputPath, retries = 2) {
   const seed = Math.floor(Math.random() * 999999);
   const encoded = encodeURIComponent(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&model=flux&nologo=true&seed=${seed}`;
+  const url = `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&model=flux&nologo=true&enhance=true&seed=${seed}`;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await fetchUrl(url, outputPath);

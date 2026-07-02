@@ -40,6 +40,10 @@ POST STRUCTURE:
 IMAGE PROMPT RULES — the prompt is for an abstract background image (NO people, NO human bodies, NO faces):
 - Use: data visualizations, glowing neural networks, abstract geometric sport shapes, stadium silhouettes from above, sport equipment close-ups, digital dashboards, particle fields
 - Style: cinematic, dark navy or deep sport colors, high-tech, photorealistic where possible
+- Be specific and concrete rather than generic — name an actual composition (e.g. "glowing neural network over a stadium silhouette viewed from the upper tier, orange data-trails converging toward the pitch") rather than vague descriptors alone
+- Include 2-3 technical quality terms that consistently improve output fidelity: cinematic lighting, volumetric light, 8k detail, sharp focus, professional render
+- Keep a single clear focal point — a cluttered composition with too many competing elements renders worse than one strong idea
+- Never ask for text, logos, or watermarks in the image itself — headline text and branding are added separately afterward, and AI-rendered text usually comes out garbled
 - NEVER describe people, athletes, or human figures
 
 JSON schema (return EXACTLY this shape):
