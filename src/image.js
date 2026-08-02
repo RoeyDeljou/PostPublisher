@@ -160,38 +160,42 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   ctx.fillStyle = accentGrad;
   ctx.fillRect(0, stripY - 7, size, 7);
 
-  // ── 4. Logo (top-left corner) ──────────────────────────────────────────────
-  const logoSize = 72;
-  const logoPad = 28;
-  let logoLoaded = false;
-  if (fs.existsSync(LOGO_PATH)) {
-    try {
-      const logo = await loadImage(LOGO_PATH);
-      // White circle background behind logo
-      ctx.beginPath();
-      ctx.arc(logoPad + logoSize / 2, logoPad + logoSize / 2, logoSize / 2 + 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.fill();
-      ctx.drawImage(logo, logoPad, logoPad, logoSize, logoSize);
-      logoLoaded = true;
-    } catch { /* skip */ }
+  // ── 4. Brand mark — logo or company name only, position/style rotates each
+  // time so the same treatment doesn't appear on every post. No topic labels
+  // or full brand-name text are ever drawn on the image itself.
+  const stripMid = stripY + BRAND.stripHeight / 2;
+  const hasLogo = fs.existsSync(LOGO_PATH);
+
+  async function drawLogoAt(x, y, logoSize) {
+    const logo = await loadImage(LOGO_PATH);
+    ctx.beginPath();
+    ctx.arc(x + logoSize / 2, y + logoSize / 2, logoSize / 2 + 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fill();
+    ctx.drawImage(logo, x, y, logoSize, logoSize);
   }
 
-  // ── 5. Brand name in strip ────────────────────────────────────────────────
-  const stripMid = stripY + BRAND.stripHeight / 2;
-  const textStart = logoLoaded ? 28 : 28;
+  function drawNameAt(x, y, align) {
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillStyle = BRAND.white;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    drawTextWithShadow(ctx, 'ML-Innovation', x, y, 'rgba(0,0,0,0.6)', 8);
+  }
 
-  ctx.font = 'bold 26px sans-serif';
-  ctx.fillStyle = BRAND.white;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  drawTextWithShadow(ctx, 'Elite Sports AI Forge', textStart, stripMid, 'rgba(0,0,0,0.6)', 8);
+  const treatments = hasLogo
+    ? ['logo-top-left', 'logo-top-right', 'logo-strip-left', 'name-strip-left', 'name-top-left']
+    : ['name-strip-left', 'name-top-left', 'name-top-right'];
+  const treatment = treatments[Math.floor(Math.random() * treatments.length)];
 
-  // Website / tagline right side
-  ctx.font = '18px sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.75)';
-  ctx.textAlign = 'right';
-  drawTextWithShadow(ctx, 'elitesportsaiforge.com', size - 28, stripMid, 'rgba(0,0,0,0.4)', 4);
+  try {
+    if (treatment === 'logo-top-left') await drawLogoAt(28, 28, 72);
+    else if (treatment === 'logo-top-right') await drawLogoAt(size - 28 - 72, 28, 72);
+    else if (treatment === 'logo-strip-left') await drawLogoAt(24, stripY + (BRAND.stripHeight - 56) / 2, 56);
+    else if (treatment === 'name-strip-left') drawNameAt(28, stripMid, 'left');
+    else if (treatment === 'name-top-left') drawNameAt(28, 50, 'left');
+    else if (treatment === 'name-top-right') drawNameAt(size - 28, 50, 'right');
+  } catch { /* branding is non-critical — skip on failure */ }
 
   // ── 6. Main headline (centered, large, with high-contrast backdrop) ──────────
   const headSize = headline.length > 45 ? 60 : headline.length > 30 ? 70 : 78;
@@ -241,27 +245,7 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     drawTextWithShadow(ctx, engagementText, size / 2, underlineY + 56, 'rgba(0,0,0,0.8)', 10);
   }
 
-  // ── 9. Bottom badge (top-right corner) with enhanced styling ────────────────
-  const badgeText = 'AI & SPORT';
-  ctx.font = 'bold 22px sans-serif';
-  const badgeW = ctx.measureText(badgeText).width + 36;
-  const badgeH = 48;
-  const badgeX = size - badgeW - 24;
-  const badgeY = 24;
-  // Badge with gradient background for more pop
-  const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
-  badgeGrad.addColorStop(0, BRAND.accent);
-  badgeGrad.addColorStop(1, '#00aa7f');
-  ctx.fillStyle = badgeGrad;
-  ctx.beginPath();
-  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 10);
-  ctx.fill();
-  ctx.fillStyle = '#050f23';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2);
-
-  // ── 10. Save ──────────────────────────────────────────────────────────────
+  // ── 9. Save ──────────────────────────────────────────────────────────────
   const buf = await canvas.encode('png');
   fs.writeFileSync(outputPath, buf);
   return outputPath;
