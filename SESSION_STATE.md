@@ -85,7 +85,7 @@ src/
 .github/workflows/
   generate-post.yml       06:00 UTC daily + manual
   daily-post.yml          08:00 UTC daily + manual
-  regenerate-image.yml    workflow_dispatch: post_id + notes
+  regenerate-post.yml     workflow_dispatch: post_id + mode (image/text/both) + notes
   update-post-status.yml  workflow_dispatch: post_id + status
 
 dashboard/index.html      GitHub Pages dashboard (3 tabs: Next Post, Gallery, All Posts)
@@ -100,7 +100,7 @@ data/pending-command.json Dashboard writes here; publish job reads and clears it
 3. Options:
    - **Do nothing** → post auto-publishes at 08:00 UTC
    - **Edit text** → click "Save edits" → your text is used at publish time
-   - **Regenerate Image** → enter notes → triggers `regenerate-image.yml` → new image in ~2 min → refresh dashboard
+   - **Improve This Post** → enter notes, pick Image Only / Text Only / Both → triggers `regenerate-post.yml` → refresh dashboard in ~1-2 min
    - **Approve** → explicitly confirms (same as doing nothing, but recorded)
    - **Delete** → post is cancelled
 4. 08:00 UTC: `daily-post.yml` runs → reads `data/pending-command.json` for any dashboard commands → publishes

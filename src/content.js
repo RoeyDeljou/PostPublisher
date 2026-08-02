@@ -21,7 +21,7 @@ const TOPIC_POOL = [
 
 const SYSTEM_PROMPT = `You are the LinkedIn content strategist for "Elite Sports AI Forge" — a brand at the intersection of artificial intelligence and professional sport.
 
-Your task: write a high-engagement LinkedIn post and return ONLY a valid JSON object. No markdown fences. No explanation.
+Your task: write a high-engagement, scroll-stopping LinkedIn post and return ONLY a valid JSON object. No markdown fences. No explanation.
 
 CRITICAL FORMATTING RULES — LinkedIn renders plain text only:
 - NEVER use ** bold **, * italic *, # headers, --- dividers, or any markdown
@@ -29,12 +29,19 @@ CRITICAL FORMATTING RULES — LinkedIn renders plain text only:
 - You MAY use emojis sparingly (1-3 total) only where they add genuine emphasis
 - Hashtags go at the very end, on their own line, space-separated
 - Max 3000 characters total
+- NEVER use double quotation marks (") anywhere inside the body, hashtags, or any text field — your entire response must be valid JSON, and a stray " inside a string breaks parsing. If you need to quote a phrase, use single quotes (') instead.
+
+HOOK LINE — this single line decides whether anyone reads further. It MUST be one of:
+- A specific, counter-intuitive statistic ("87% of season-ending injuries were predictable 72 hours out.")
+- A bold claim that challenges conventional wisdom ("Scouts have been wrong about talent for decades — and they finally know why.")
+- A curiosity-gap question that creates an itch the reader needs scratched ("The best pass in football last season wasn't made by a player.")
+NEVER open with "I'm excited to share", "In today's world", or any generic scene-setting. The hook stands alone as line one — no lead-in.
 
 POST STRUCTURE:
-1. Hook line — a stat, bold claim, or provocative question (no "I'm excited to share")
-2. 3-4 short paragraphs (2-4 sentences each), blank line between each
-3. One concrete example or case study in paragraph 3
-4. CTA closing line — invite a comment or share
+1. The hook line (see above)
+2. 3-4 short paragraphs (2-4 sentences each), blank line between each — vary sentence length deliberately: mix punchy one-liners with longer explanatory sentences for rhythm (pattern interrupt), don't let every paragraph read the same length
+3. One concrete example, stat, or case study in paragraph 3 — specific team/company/number, not a vague generality
+4. CTA closing line — specific and action-oriented, tied to the post's actual content (e.g. "Which of these three signals is your team already tracking?" not a generic "What do you think?")
 5. 4-6 hashtags on final line
 
 IMAGE PROMPT RULES — the prompt is for an abstract background image (NO people, NO human bodies, NO faces):
@@ -46,16 +53,53 @@ IMAGE PROMPT RULES — the prompt is for an abstract background image (NO people
 - Never ask for text, logos, or watermarks in the image itself — headline text and branding are added separately afterward, and AI-rendered text usually comes out garbled
 - NEVER describe people, athletes, or human figures
 
+HEADLINE TEXT — this is overlaid boldly on the image itself (max 60 chars), so it should read like the punchiest possible summary of the hook: short, bold, high-contrast phrasing — think chart-topping headline, not a full sentence.
+
 JSON schema (return EXACTLY this shape):
 {
   "angle": "<topic angle>",
   "body": "<full post text — plain text only, no markdown>",
   "hashtags": ["#Tag1", "#Tag2"],
-  "imagePrompt": "<Pollinations Flux background prompt — abstract, no people>",
+  "imagePrompt": "<Pollinations/Flux background prompt — abstract, no people>",
   "imageEngagementText": "<short punchy overlay line, max 8 words, different from headlineText>",
   "headlineText": "<max 60 char main headline for image overlay>",
   "scheduledFor": "<ISO8601 tomorrow at 08:00 UTC>"
 }`;
+
+function sanitizeBody(body) {
+  return body
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')  // remove bold/italic
+    .replace(/^#{1,6}\s+/gm, '')               // remove headers
+    .replace(/^---+$/gm, '')                   // remove dividers
+    .trim();
+}
+
+function parseClaudeJson(response) {
+  const raw = response.content[0].text.trim();
+  const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+  return JSON.parse(cleaned);
+}
+
+// LLM "JSON" occasionally breaks (e.g. a stray unescaped quote inside a text field)
+// despite the prompt instructing against it — retry the whole call rather than
+// attempt fragile regex repair on malformed JSON.
+async function callClaudeForJson(client, systemPrompt, userMessage, retries = 2) {
+  let lastErr;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+    try {
+      return parseClaudeJson(response);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
 
 async function generateContent(recentBodies = [], regenerationNotes = null) {
   const client = new Anthropic();
@@ -85,26 +129,52 @@ ${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}${notesSec
 
 Generate the LinkedIn post. Return only JSON.`;
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1200,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMessage }],
-  });
-
-  const raw = response.content[0].text.trim();
-  const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-  const payload = JSON.parse(cleaned);
-
-  // Sanitize: strip any accidental markdown that slipped through
-  payload.body = payload.body
-    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')  // remove bold/italic
-    .replace(/^#{1,6}\s+/gm, '')               // remove headers
-    .replace(/^---+$/gm, '')                   // remove dividers
-    .trim();
+  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage);
+  payload.body = sanitizeBody(payload.body);
 
   if (!payload.scheduledFor) payload.scheduledFor = scheduledFor;
   if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
+
+  return payload;
+}
+
+// Revise an EXISTING post per user notes, keeping the same core angle/topic rather than
+// picking a brand new one — used by the dashboard's "regenerate with notes" flow.
+async function reviseContent(existingPost, notes = null) {
+  const client = new Anthropic();
+
+  const template = getActiveTemplate();
+  const styleSection = template
+    ? `\n\nIMAGE STYLE GUIDANCE (apply to imagePrompt):\n${template.styleNotes}`
+    : '';
+
+  const notesSection = notes
+    ? `\n\nIMPROVEMENT INSTRUCTIONS:\n${notes}`
+    : '\n\nNo specific instructions given — just make it stronger: sharper hook, tighter writing, more compelling CTA.';
+
+  const existingHashtags = Array.isArray(existingPost.hashtags)
+    ? existingPost.hashtags.join(' ')
+    : (existingPost.hashtags || '');
+
+  const userMessage = `Here is an EXISTING LinkedIn post that needs revision. Keep the same core angle/topic — do not switch to a different subject, just improve the execution.
+
+ANGLE: ${existingPost.angle || '(none)'}
+
+CURRENT BODY:
+${existingPost.body || '(none)'}
+
+CURRENT HASHTAGS: ${existingHashtags || '(none)'}
+CURRENT IMAGE PROMPT: ${existingPost.imagePrompt || '(none)'}
+${notesSection}${styleSection}
+
+Revise this post. Return only JSON with the same schema as before (angle, body, hashtags, imagePrompt, imageEngagementText, headlineText) — omit scheduledFor, the caller keeps the original.`;
+
+  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage);
+  payload.body = sanitizeBody(payload.body);
+
+  if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
+  if (!payload.angle) payload.angle = existingPost.angle;
+  if (!payload.imagePrompt) payload.imagePrompt = existingPost.imagePrompt;
 
   return payload;
 }
@@ -117,4 +187,4 @@ if (require.main === module) {
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }
 
-module.exports = { generateContent };
+module.exports = { generateContent, reviseContent };

@@ -130,12 +130,20 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     try { if (fs.existsSync(bgTemp)) fs.unlinkSync(bgTemp); } catch {}
   }
 
-  // ── 2. Dark vignette overlay ───────────────────────────────────────────────
+  // ── 2. Stronger dark vignette overlay (enhanced contrast) ─────────────────────
   const vignette = ctx.createRadialGradient(size / 2, size / 2, size * 0.25, size / 2, size / 2, size * 0.85);
-  vignette.addColorStop(0, 'rgba(5,15,35,0.35)');
-  vignette.addColorStop(1, 'rgba(5,15,35,0.72)');
+  vignette.addColorStop(0, 'rgba(5,15,35,0.45)');
+  vignette.addColorStop(1, 'rgba(5,15,35,0.85)');
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, size, size);
+
+  // ── 2b. Add a subtle left-edge accent stripe for visual energy ───────────────
+  const accentStripeGrad = ctx.createLinearGradient(0, 0, 0, size);
+  accentStripeGrad.addColorStop(0, BRAND.accent);
+  accentStripeGrad.addColorStop(0.5, '#00ffbb');
+  accentStripeGrad.addColorStop(1, BRAND.accent);
+  ctx.fillStyle = accentStripeGrad;
+  ctx.fillRect(0, 0, 6, size);
 
   // ── 3. Brand strip (bottom) ────────────────────────────────────────────────
   const stripY = size - BRAND.stripHeight;
@@ -144,13 +152,13 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   ctx.fillStyle = BRAND.primary;
   ctx.fillRect(0, stripY, size, BRAND.stripHeight);
 
-  // Accent line above strip
+  // Accent line above strip (bolder)
   const accentGrad = ctx.createLinearGradient(0, 0, size, 0);
   accentGrad.addColorStop(0, BRAND.accent);
   accentGrad.addColorStop(0.5, '#00ffbb');
   accentGrad.addColorStop(1, BRAND.accent);
   ctx.fillStyle = accentGrad;
-  ctx.fillRect(0, stripY - 5, size, 5);
+  ctx.fillRect(0, stripY - 7, size, 7);
 
   // ── 4. Logo (top-left corner) ──────────────────────────────────────────────
   const logoSize = 72;
@@ -185,8 +193,8 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   ctx.textAlign = 'right';
   drawTextWithShadow(ctx, 'elitesportsaiforge.com', size - 28, stripMid, 'rgba(0,0,0,0.4)', 4);
 
-  // ── 6. Main headline (centered, large) ────────────────────────────────────
-  const headSize = headline.length > 45 ? 56 : headline.length > 30 ? 64 : 72;
+  // ── 6. Main headline (centered, large, with high-contrast backdrop) ──────────
+  const headSize = headline.length > 45 ? 60 : headline.length > 30 ? 70 : 78;
   ctx.font = `bold ${headSize}px sans-serif`;
   ctx.fillStyle = BRAND.white;
   ctx.textAlign = 'center';
@@ -197,15 +205,32 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   const headTotalH = headLines.length * headLineH;
   const headStartY = size / 2 - headTotalH / 2 - 60;
 
+  // Add semi-transparent pill/panel behind headline for extra contrast and pop
+  const headPadX = 40;
+  const headPadY = 30;
+  const headlineBackY = headStartY - headPadY + headSize * 0.15;
+  const headlineBackH = headTotalH + headPadY * 1.6;
+  ctx.fillStyle = 'rgba(5,15,35,0.68)';
+  ctx.beginPath();
+  ctx.roundRect(headPadX, headlineBackY, size - headPadX * 2, headlineBackH, 16);
+  ctx.fill();
+
+  // Draw headline text on top of the backdrop (reset fillStyle — it was overwritten by the pill above)
+  ctx.fillStyle = BRAND.white;
   headLines.forEach((line, i) => {
     drawTextWithShadow(ctx, line, size / 2, headStartY + i * headLineH, 'rgba(0,0,0,0.9)', 18);
   });
 
-  // ── 7. Accent underline below headline ────────────────────────────────────
+  // ── 7. Bolder accent underline below headline ─────────────────────────────
   const underlineY = headStartY + headTotalH + 10;
-  const underlineW = 140;
-  ctx.fillStyle = BRAND.accent;
-  ctx.fillRect(size / 2 - underlineW / 2, underlineY, underlineW, 5);
+  const underlineW = 200;
+  // Create a gradient for the underline for extra visual impact
+  const underlineGrad = ctx.createLinearGradient(size / 2 - underlineW / 2, 0, size / 2 + underlineW / 2, 0);
+  underlineGrad.addColorStop(0, 'rgba(0,200,150,0.3)');
+  underlineGrad.addColorStop(0.5, BRAND.accent);
+  underlineGrad.addColorStop(1, 'rgba(0,200,150,0.3)');
+  ctx.fillStyle = underlineGrad;
+  ctx.fillRect(size / 2 - underlineW / 2, underlineY, underlineW, 8);
 
   // ── 8. Engagement sub-text ────────────────────────────────────────────────
   if (engagementText) {
@@ -216,16 +241,20 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     drawTextWithShadow(ctx, engagementText, size / 2, underlineY + 56, 'rgba(0,0,0,0.8)', 10);
   }
 
-  // ── 9. Bottom badge (top-right corner) ────────────────────────────────────
+  // ── 9. Bottom badge (top-right corner) with enhanced styling ────────────────
   const badgeText = 'AI & SPORT';
-  ctx.font = 'bold 20px sans-serif';
-  const badgeW = ctx.measureText(badgeText).width + 32;
-  const badgeH = 40;
+  ctx.font = 'bold 22px sans-serif';
+  const badgeW = ctx.measureText(badgeText).width + 36;
+  const badgeH = 48;
   const badgeX = size - badgeW - 24;
   const badgeY = 24;
-  ctx.fillStyle = BRAND.accent;
+  // Badge with gradient background for more pop
+  const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
+  badgeGrad.addColorStop(0, BRAND.accent);
+  badgeGrad.addColorStop(1, '#00aa7f');
+  ctx.fillStyle = badgeGrad;
   ctx.beginPath();
-  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 8);
+  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 10);
   ctx.fill();
   ctx.fillStyle = '#050f23';
   ctx.textAlign = 'center';

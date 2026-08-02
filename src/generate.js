@@ -7,14 +7,14 @@
  * Also called by regenerate-image.yml when the user requests a new image with notes.
  *
  * Args:
- *   --post-id N      Regenerate image for existing post N (keeps body, replaces image)
- *   --notes "text"   Extra instructions for content/image generation
- *   --image-only     Only regenerate image, do not touch the post body
+ *   --post-id N          Regenerate an existing post N
+ *   --mode <mode>        image (default) | text | both — what to regenerate
+ *   --notes "text"       Extra instructions for the regeneration
  */
 
 const path = require('path');
 const fs = require('fs');
-const { generateContent } = require('./content');
+const { generateContent, reviseContent } = require('./content');
 const { buildImage } = require('./image');
 const { ops: db } = require('./db');
 const { isPaused } = require('./pause');
@@ -26,7 +26,6 @@ function getArg(flag) {
   const i = process.argv.indexOf(flag);
   return i !== -1 ? process.argv[i + 1] : null;
 }
-const hasFlag = flag => process.argv.includes(flag);
 
 async function main() {
   if (isPaused()) {
@@ -36,43 +35,86 @@ async function main() {
 
   const postIdArg = getArg('--post-id');
   const notes = getArg('--notes');
-  const imageOnly = hasFlag('--image-only');
+  const mode = getArg('--mode') || 'image';
 
   if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
 
-  // ── Regeneration mode: re-make image for existing post ─────────────────────
+  // ── Regeneration mode: re-make image and/or text for an existing post ──────
   if (postIdArg) {
     const postId = Number(postIdArg);
     const post = db.getById(postId);
     if (!post) { console.error(`Post ${postId} not found`); process.exit(1); }
 
-    console.log(`[generate] Regenerating image for post id=${postId}`);
+    console.log(`[generate] Regenerating post id=${postId} (mode=${mode})`);
     if (notes) console.log(`[generate] Notes: ${notes}`);
 
-    const template = getActiveTemplate();
-    const imagePrompt = [
-      post.image_prompt,
-      notes ? `Additional guidance: ${notes}` : null,
-      template ? `Style reference: ${template.styleNotes}` : null,
-    ].filter(Boolean).join('. ');
+    let angle = post.angle;
+    let body = post.body;
+    let hashtags = post.hashtags;
+    let imagePrompt = post.image_prompt;
+    let engagementText = post.engagement_text;
+    let headlineText = post.angle || 'AI & Sport';
 
-    const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
-    const imagePath = await buildImage({
-      prompt: imagePrompt,
-      headline: post.angle || 'AI & Sport',
-      engagementText: post.engagement_text || 'Data-driven. Game-changing.',
-      outputPath,
-      notes,
-    });
+    // ── Text revision (mode=text or mode=both) ────────────────────────────────
+    if (mode === 'text' || mode === 'both') {
+      let parsedHashtags = [];
+      try { parsedHashtags = JSON.parse(post.hashtags || '[]'); } catch { /* leave empty */ }
 
-    db.update(postId, {
-      imagePath,
-      reviewStatus: 'pending',
-      regenerationNotes: notes || null,
-    });
+      const revised = await reviseContent({
+        angle: post.angle,
+        body: post.body,
+        hashtags: parsedHashtags,
+        imagePrompt: post.image_prompt,
+      }, notes);
 
-    console.log(`[generate] ✅ New image: ${imagePath}`);
-    console.log(JSON.stringify({ postId, imagePath }));
+      angle = revised.angle;
+      body = revised.body;
+      hashtags = JSON.stringify(revised.hashtags || parsedHashtags);
+      imagePrompt = revised.imagePrompt || post.image_prompt;
+      engagementText = revised.imageEngagementText || post.engagement_text;
+      headlineText = revised.headlineText || angle;
+
+      db.update(postId, {
+        angle,
+        body,
+        hashtags,
+        imagePrompt,
+        engagementText,
+        reviewStatus: 'pending',
+        regenerationNotes: notes || null,
+      });
+      console.log(`[generate] ✅ Text revised for post ${postId}`);
+    }
+
+    // ── Image rebuild (mode=image or mode=both) ───────────────────────────────
+    if (mode === 'image' || mode === 'both') {
+      const template = getActiveTemplate();
+      const finalImagePrompt = mode === 'both'
+        ? [imagePrompt, template ? `Style reference: ${template.styleNotes}` : null].filter(Boolean).join('. ')
+        : [
+            post.image_prompt,
+            notes ? `Additional guidance: ${notes}` : null,
+            template ? `Style reference: ${template.styleNotes}` : null,
+          ].filter(Boolean).join('. ');
+
+      const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
+      const newImagePath = await buildImage({
+        prompt: finalImagePrompt,
+        headline: headlineText,
+        engagementText: engagementText || 'Data-driven. Game-changing.',
+        outputPath,
+        notes,
+      });
+
+      db.update(postId, {
+        imagePath: newImagePath,
+        reviewStatus: 'pending',
+        regenerationNotes: notes || null,
+      });
+      console.log(`[generate] ✅ New image: ${newImagePath}`);
+    }
+
+    console.log(JSON.stringify({ postId, mode }));
     return;
   }
 

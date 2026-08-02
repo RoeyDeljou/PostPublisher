@@ -79,6 +79,7 @@ const ops = {
       imagePath: 'image_path', approvedAt: 'approved_at',
       regenerationNotes: 'regeneration_notes', body: 'body',
       engagementText: 'engagement_text', scheduledFor: 'scheduled_for',
+      angle: 'angle', hashtags: 'hashtags', imagePrompt: 'image_prompt',
     };
     const allowed = Object.values(fieldMap);
     const setClauses = [];
