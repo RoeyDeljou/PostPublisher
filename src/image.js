@@ -11,11 +11,8 @@ const IMAGES_DIR = path.join(__dirname, '..', 'data', 'images');
 const LOGO_PATH = path.join(__dirname, '..', 'data', 'logo.png');
 
 const BRAND = {
-  primary: '#0A66C2',
   accent: '#00C896',
   white: '#FFFFFF',
-  darkOverlay: 'rgba(5, 15, 35, 0.62)',
-  stripHeight: 90,
   size: 1080,
 };
 
@@ -137,41 +134,16 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, size, size);
 
-  // ── 2b. Add a subtle left-edge accent stripe for visual energy ───────────────
-  const accentStripeGrad = ctx.createLinearGradient(0, 0, 0, size);
-  accentStripeGrad.addColorStop(0, BRAND.accent);
-  accentStripeGrad.addColorStop(0.5, '#00ffbb');
-  accentStripeGrad.addColorStop(1, BRAND.accent);
-  ctx.fillStyle = accentStripeGrad;
-  ctx.fillRect(0, 0, 6, size);
-
-  // ── 3. Brand strip (bottom) ────────────────────────────────────────────────
-  const stripY = size - BRAND.stripHeight;
-
-  // Strip background with slight transparency
-  ctx.fillStyle = BRAND.primary;
-  ctx.fillRect(0, stripY, size, BRAND.stripHeight);
-
-  // Accent line above strip (bolder)
-  const accentGrad = ctx.createLinearGradient(0, 0, size, 0);
-  accentGrad.addColorStop(0, BRAND.accent);
-  accentGrad.addColorStop(0.5, '#00ffbb');
-  accentGrad.addColorStop(1, BRAND.accent);
-  ctx.fillStyle = accentGrad;
-  ctx.fillRect(0, stripY - 7, size, 7);
-
-  // ── 4. Brand mark — logo or company name only, position/style rotates each
+  // ── 3. Brand mark — logo or company name only, position/style rotates each
   // time so the same treatment doesn't appear on every post. No topic labels
-  // or full brand-name text are ever drawn on the image itself.
-  const stripMid = stripY + BRAND.stripHeight / 2;
+  // or full brand-name text are ever drawn on the image itself. No added
+  // bars, strips, or frames — this sits directly on the photo.
   const hasLogo = fs.existsSync(LOGO_PATH);
 
   async function drawLogoAt(x, y, logoSize) {
+    // The logo file is a flat, opaque square with its own background baked
+    // in — draw it as-is, no extra backdrop shape behind it.
     const logo = await loadImage(LOGO_PATH);
-    ctx.beginPath();
-    ctx.arc(x + logoSize / 2, y + logoSize / 2, logoSize / 2 + 6, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fill();
     ctx.drawImage(logo, x, y, logoSize, logoSize);
   }
 
@@ -184,15 +156,13 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   }
 
   const treatments = hasLogo
-    ? ['logo-top-left', 'logo-top-right', 'logo-strip-left', 'name-strip-left', 'name-top-left']
-    : ['name-strip-left', 'name-top-left', 'name-top-right'];
+    ? ['logo-top-left', 'logo-top-right', 'name-top-left', 'name-top-right']
+    : ['name-top-left', 'name-top-right'];
   const treatment = treatments[Math.floor(Math.random() * treatments.length)];
 
   try {
     if (treatment === 'logo-top-left') await drawLogoAt(28, 28, 72);
     else if (treatment === 'logo-top-right') await drawLogoAt(size - 28 - 72, 28, 72);
-    else if (treatment === 'logo-strip-left') await drawLogoAt(24, stripY + (BRAND.stripHeight - 56) / 2, 56);
-    else if (treatment === 'name-strip-left') drawNameAt(28, stripMid, 'left');
     else if (treatment === 'name-top-left') drawNameAt(28, 50, 'left');
     else if (treatment === 'name-top-right') drawNameAt(size - 28, 50, 'right');
   } catch { /* branding is non-critical — skip on failure */ }
@@ -209,11 +179,19 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   const headTotalH = headLines.length * headLineH;
   const headStartY = size / 2 - headTotalH / 2 - 60;
 
-  // Add semi-transparent pill/panel behind headline for extra contrast and pop
+  // Add semi-transparent pill/panel behind headline for extra contrast and pop.
+  // textBaseline is 'alphabetic', so headStartY is the FIRST line's baseline —
+  // glyphs extend upward (ascent) from there, not downward. Since the headline
+  // is always uppercase there are no true descenders, so the panel only needs
+  // to wrap ascent-above to baseline-of-last-line-below, symmetrically padded.
   const headPadX = 40;
-  const headPadY = 30;
-  const headlineBackY = headStartY - headPadY + headSize * 0.15;
-  const headlineBackH = headTotalH + headPadY * 1.6;
+  const headPadY = 26;
+  const ascent = headSize * 0.74;
+  const descentAllowance = headSize * 0.06;
+  const textTop = headStartY - ascent;
+  const textBottom = headStartY + (headLines.length - 1) * headLineH + descentAllowance;
+  const headlineBackY = textTop - headPadY;
+  const headlineBackH = (textBottom - textTop) + headPadY * 2;
   ctx.fillStyle = 'rgba(5,15,35,0.68)';
   ctx.beginPath();
   ctx.roundRect(headPadX, headlineBackY, size - headPadX * 2, headlineBackH, 16);
