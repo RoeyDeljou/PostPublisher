@@ -800,7 +800,6 @@ function renderGallery() {
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
     if (filter && r.status !== filter) return false;
-    if (!filter && r.status === 'pending') return false; // shown in the draft showcase above instead
     return !!r.image_path;
   });
   document.getElementById('gallery-count').textContent = `${rows.length} image${rows.length !== 1 ? 's' : ''}`;
