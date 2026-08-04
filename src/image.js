@@ -113,8 +113,14 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   const bgTemp = path.join(IMAGES_DIR, `_bg_${Date.now()}.jpg`);
   let bgLoaded = false;
 
-  // Strengthen the prompt to avoid humans
-  const safePrompt = `${prompt}, no people, no human figures, no faces, no bodies, abstract, highly detailed`;
+  // Default to avoiding humans (free-tier image models are prone to deformed
+  // hands/faces/bodies) — but an explicit request for people in the notes
+  // overrides that default rather than being silently blocked.
+  const peopleWords = /\b(people|person|player|players|human|humans|athlete|athletes|man|woman|men|women|coach|sprinter|striker|goalkeeper)\b/i;
+  const wantsPeople = peopleWords.test(notes || '') || peopleWords.test(prompt || '');
+  const safePrompt = wantsPeople
+    ? `${prompt}, photorealistic, natural body proportions, professional sports photography, dynamic action`
+    : `${prompt}, no people, no human figures, no faces, no bodies, abstract, highly detailed`;
 
   try {
     await fetchPollinationsBackground(safePrompt, bgTemp);
@@ -155,10 +161,25 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     drawTextWithShadow(ctx, 'ML-Innovation', x, y, 'rgba(0,0,0,0.6)', 8);
   }
 
-  const treatments = hasLogo
-    ? ['logo-top-left', 'logo-top-right', 'name-top-left', 'name-top-right']
-    : ['name-top-left', 'name-top-right'];
-  const treatment = treatments[Math.floor(Math.random() * treatments.length)];
+  // An explicit request in the notes (e.g. "put the logo in the top left")
+  // overrides the normal random rotation instead of being ignored.
+  const notesLower = (notes || '').toLowerCase();
+  const wantsLogo = /\blogo\b/.test(notesLower);
+  const wantsName = /\bname\b|\bml-innovation\b/.test(notesLower);
+  const wantsTopRight = /top[\s-]?right/.test(notesLower);
+  const wantsTopLeft = /top[\s-]?left/.test(notesLower);
+
+  let treatment;
+  if (wantsLogo && hasLogo) treatment = wantsTopRight ? 'logo-top-right' : 'logo-top-left';
+  else if (wantsName) treatment = wantsTopRight ? 'name-top-right' : 'name-top-left';
+  else if (wantsTopLeft) treatment = hasLogo ? 'logo-top-left' : 'name-top-left';
+  else if (wantsTopRight) treatment = hasLogo ? 'logo-top-right' : 'name-top-right';
+  else {
+    const treatments = hasLogo
+      ? ['logo-top-left', 'logo-top-right', 'name-top-left', 'name-top-right']
+      : ['name-top-left', 'name-top-right'];
+    treatment = treatments[Math.floor(Math.random() * treatments.length)];
+  }
 
   try {
     if (treatment === 'logo-top-left') await drawLogoAt(28, 28, 72);

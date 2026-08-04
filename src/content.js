@@ -44,14 +44,14 @@ POST STRUCTURE:
 4. CTA closing line — specific and action-oriented, tied to the post's actual content (e.g. "Which of these three signals is your team already tracking?" not a generic "What do you think?")
 5. 4-6 hashtags on final line
 
-IMAGE PROMPT RULES — the prompt is for an abstract background image (NO people, NO human bodies, NO faces):
-- Use: data visualizations, glowing neural networks, abstract geometric sport shapes, stadium silhouettes from above, sport equipment close-ups, digital dashboards, particle fields
+IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same abstract data-viz look every time:
+- Vary the composition type based on what actually fits THIS topic — don't default to "glowing neural network" for everything. Options include: real athletes/players training or competing (soccer players on a pitch, a sprinter mid-stride, a coach reviewing footage), stadium or training-ground scenes, sport equipment close-ups, wearable tech on an athlete, data visualizations and dashboards, abstract geometric sport shapes, particle fields. Pick whichever genuinely suits the angle.
+- Human figures and athletes ARE allowed and often make the strongest, most relevant image for a sports topic — use them when the topic calls for it (scouting, training, injury prevention, officiating, etc. are all naturally people-centric). When you do include people, describe them concretely and photorealistically (e.g. "a soccer player mid-sprint on a floodlit pitch at night, motion blur on the legs, coach staff reviewing a tablet on the sideline") so the renderer has a clear, natural scene to work with rather than an ambiguous one.
 - Style: cinematic, dark navy or deep sport colors, high-tech, photorealistic where possible
-- Be specific and concrete rather than generic — name an actual composition (e.g. "glowing neural network over a stadium silhouette viewed from the upper tier, orange data-trails converging toward the pitch") rather than vague descriptors alone
-- Include 2-3 technical quality terms that consistently improve output fidelity: cinematic lighting, volumetric light, 8k detail, sharp focus, professional render
+- Be specific and concrete rather than generic — name an actual composition and setting rather than vague descriptors alone
+- Include 2-3 technical quality terms that consistently improve output fidelity: cinematic lighting, volumetric light, 8k detail, sharp focus, professional render, natural body proportions (when depicting people)
 - Keep a single clear focal point — a cluttered composition with too many competing elements renders worse than one strong idea
 - Never ask for text, logos, or watermarks in the image itself — headline text and branding are added separately afterward, and AI-rendered text usually comes out garbled
-- NEVER describe people, athletes, or human figures
 
 HEADLINE TEXT — this is overlaid boldly on the image itself (max 60 chars), so it should read like the punchiest possible summary of the hook: short, bold, high-contrast phrasing — think chart-topping headline, not a full sentence.
 

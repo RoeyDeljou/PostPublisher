@@ -311,6 +311,9 @@
       <input id="cfg-repo" placeholder="e.g. social-posts-system" /></div>
     <div class="field"><label>GitHub Personal Access Token</label>
       <input id="cfg-token" type="password" placeholder="github_pat_..." /></div>
+    <div class="github-config-note" style="color:#92400e;background:#fef3c7;border-color:#fde68a">
+      🖼️ Image regeneration ("Image Only" / "Both") is temporarily disabled — Pollinations, the free image service this project uses, has a very tight daily quota and started returning "insufficient balance" errors after the first request each day. Text-only regeneration still works. Daily auto-generation continues normally.
+    </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
       <button class="btn btn-primary" onclick="saveSettings()">Save</button>
@@ -490,12 +493,13 @@ function renderPendingPanel(){
           ${canAct ? `
           <div class="card">
             <div class="card-label">Improve This Post</div>
-            <textarea class="notes" id="regen-notes" placeholder="Describe what to improve — image style, wording, or both…"></textarea>
+            <textarea class="notes" id="regen-notes" placeholder="Describe what to improve — wording (image regen is temporarily disabled)…"></textarea>
             <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
-              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'image', 'regen-notes')">🖼 Image Only</button>
+              <button class="btn btn-warn btn-sm" disabled title="Temporarily disabled — free image generation has a very limited daily quota" style="opacity:.4;cursor:not-allowed">🖼 Image Only</button>
               <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'text', 'regen-notes')">✏️ Text Only</button>
-              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', 'regen-notes')">✨ Both</button>
+              <button class="btn btn-warn btn-sm" disabled title="Temporarily disabled — free image generation has a very limited daily quota" style="opacity:.4;cursor:not-allowed">✨ Both</button>
             </div>
+            <p style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Image regeneration is paused for now — see the note in Settings for why.</p>
           </div>
           <div class="card">
             <div class="card-label">Reschedule</div>
@@ -816,11 +820,11 @@ function renderGalleryDraft() {
           </div>
           ${canAct ? `
           <div style="margin-top:.75rem">
-            <textarea class="notes" id="draft-regen-notes" placeholder="Describe what to improve — image style, wording, or both…" style="height:56px"></textarea>
+            <textarea class="notes" id="draft-regen-notes" placeholder="Describe what to improve — wording (image regen is temporarily disabled)…" style="height:56px"></textarea>
             <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap">
-              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'image', 'draft-regen-notes')">🖼 Image Only</button>
+              <button class="btn btn-warn btn-sm" disabled title="Temporarily disabled — free image generation has a very limited daily quota" style="opacity:.4;cursor:not-allowed">🖼 Image Only</button>
               <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'text', 'draft-regen-notes')">✏️ Text Only</button>
-              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', 'draft-regen-notes')">✨ Both</button>
+              <button class="btn btn-warn btn-sm" disabled title="Temporarily disabled — free image generation has a very limited daily quota" style="opacity:.4;cursor:not-allowed">✨ Both</button>
             </div>
           </div>` : `<p style="font-size:.78rem;color:var(--muted);margin-top:.5rem">Configure GitHub settings to regenerate from here.</p>`}
         </div>
