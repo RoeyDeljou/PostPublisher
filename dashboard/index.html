@@ -437,18 +437,26 @@ function renderPendingPanel(){
   note.style.display = (cfg.owner && cfg.token) ? 'none' : 'block';
 
   const container = document.getElementById('pending-content');
-  const pending = allRows.filter(r => r.status === 'pending').sort((a,b) => {
+  const allPending = allRows.filter(r => r.status === 'pending');
+  const pending = allPending.filter(r => r.review_status !== 'archived').sort((a,b) => {
     const sa = a.scheduled_for || a.created_at;
     const sb = b.scheduled_for || b.created_at;
     return sa < sb ? -1 : 1;
   });
 
   if (!pending.length) {
-    container.innerHTML = `<div class="no-pending">
-      <h2>No pending posts</h2>
-      <p>The next post will appear here after the 6:00 UTC generation run.<br>
-      You can also trigger it manually: GitHub → Actions → "Generate Daily Post" → Run workflow.</p>
-    </div>`;
+    const hasArchived = allPending.some(r => r.review_status === 'archived');
+    container.innerHTML = hasArchived
+      ? `<div class="no-pending">
+          <h2>Next post moved already to gallery</h2>
+          <p>Browse it (and everything else) in the Gallery tab.<br>
+          A new draft will appear here after the next 6:00 UTC generation run.</p>
+        </div>`
+      : `<div class="no-pending">
+          <h2>No pending posts</h2>
+          <p>The next post will appear here after the 6:00 UTC generation run.<br>
+          You can also trigger it manually: GitHub → Actions → "Generate Daily Post" → Run workflow.</p>
+        </div>`;
     return;
   }
 
@@ -521,6 +529,7 @@ function renderPendingPanel(){
         <div class="action-row">
           <button class="btn btn-success" onclick="approvePost(${post.id})">✅ Approve & Schedule</button>
           <button class="btn btn-ghost" onclick="rejectPost(${post.id})">🚫 Reject</button>
+          <button class="btn btn-warn" onclick="moveToGallery(${post.id})">📦 Move to Gallery</button>
           <button class="btn btn-danger" onclick="deletePost(${post.id})">🗑 Delete Post</button>
         </div>
         <div class="action-row">
@@ -529,7 +538,7 @@ function renderPendingPanel(){
           <button class="btn btn-primary btn-sm" onclick="markAsPosted(${post.id})">✅ Mark as Posted</button>
         </div>
         <p style="font-size:.78rem;color:var(--muted);margin-top:.25rem">
-          If no action taken, this post auto-publishes at its scheduled time.
+          Publishing is manual right now — copy the text, download the image, post it yourself on LinkedIn, then Mark as Posted. This post stays featured here until you Move it to Gallery or a new one is generated.
         </p>` : `
         <div style="font-size:.85rem;color:var(--muted);background:#f9fafb;border-radius:8px;padding:.85rem">
           Configure GitHub settings to enable actions. Post will auto-publish at scheduled time.
@@ -561,19 +570,29 @@ function linkedinUrl(postUrn) {
 }
 
 // ── GitHub Actions / Contents API helpers ────────────────────────────────────
+// Returns { ok, detail } — detail carries the real reason on failure (HTTP status +
+// GitHub's error message) instead of swallowing it, so failures are diagnosable.
 async function triggerWorkflow(workflowFile, inputs) {
   const cfg = getCfg();
   if (!cfg.owner || !cfg.repo || !cfg.token) {
-    toast('⚠️ Configure GitHub settings first', 4000); return false;
+    toast('⚠️ Configure GitHub settings first', 4000);
+    return { ok: false, detail: 'GitHub settings not configured' };
   }
   const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${workflowFile}/dispatches`;
   const body = { ref: 'main', inputs };
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
-    body: JSON.stringify(body),
-  });
-  return res.ok || res.status === 204;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok || res.status === 204) return { ok: true, detail: '' };
+    let msg = '';
+    try { const j = await res.json(); msg = j.message || ''; } catch {}
+    return { ok: false, detail: `HTTP ${res.status}${msg ? ' — ' + msg : ''}` };
+  } catch (err) {
+    return { ok: false, detail: 'Network error — ' + err.message };
+  }
 }
 
 // Generic "commit a file to the repo" helper (get SHA if it exists, then PUT).
@@ -667,30 +686,44 @@ function downloadPostImage(postId) {
 async function markAsPosted(postId) {
   if (!confirm('Mark this post as posted on LinkedIn? This just updates the tracker — it won\'t publish anything.')) return;
   toast('Marking as posted…');
-  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'posted' });
-  toast(ok ? '✅ Marked as posted — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'posted' });
+  toast(r.ok ? '✅ Marked as posted — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
 }
 
 // ── Review actions (immediate DB writes via update-post-status.yml) ─────────
 async function approvePost(postId) {
   if (!confirm('Approve this post? It will publish at its scheduled time.')) return;
   toast('Approving…');
-  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'approved' });
-  toast(ok ? '✅ Approved — will auto-publish at scheduled time' : '❌ Failed to trigger workflow', 4000);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'approved' });
+  toast(r.ok ? '✅ Approved — will auto-publish at scheduled time' : `❌ Failed: ${r.detail}`, 6000);
 }
 
 async function rejectPost(postId) {
   if (!confirm('Reject this post? It will not publish unless re-approved.')) return;
   toast('Rejecting…');
-  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'rejected' });
-  toast(ok ? '🚫 Rejected — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'rejected' });
+  toast(r.ok ? '🚫 Rejected — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
 }
 
 async function deletePost(postId) {
   if (!confirm('Delete this post? It will not be published.')) return;
   toast('Deleting…');
-  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
-  toast(ok ? '🗑 Post deleted — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
+  toast(r.ok ? '🗑 Post deleted — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
+}
+
+async function moveToGallery(postId) {
+  if (!confirm('Move this post to the Gallery? It stays pending and fully browsable there — it just stops being featured as "Next Post". The next-oldest draft will take its place here.')) return;
+  toast('Moving to gallery…');
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), review_status: 'archived' });
+  if (r.ok) {
+    const placeholder = `<div class="no-pending"><h2>Next post moved already to gallery</h2><p>Browse it in the Gallery tab.<br>A new draft will appear here after it's generated (or once you move it too).</p></div>`;
+    const pendingEl = document.getElementById('pending-content');
+    if (pendingEl) pendingEl.innerHTML = placeholder;
+    const draftEl = document.getElementById('gallery-draft-section');
+    if (draftEl) draftEl.innerHTML = '';
+  }
+  toast(r.ok ? '📦 Moved to gallery' : `❌ Failed: ${r.detail}`, 6000);
 }
 
 async function saveBodyEdit(postId) {
@@ -707,8 +740,8 @@ async function reschedulePost(postId) {
   const iso = `${date}T08:00:00Z`;
   if (!confirm(`Reschedule post ${postId} to ${date} (publishes at 08:00 UTC that day)?`)) return;
   toast('Rescheduling…');
-  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), scheduled_for: iso });
-  toast(ok ? '📅 Reschedule queued — refresh in ~1 min' : '❌ Failed to trigger workflow', 4000);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), scheduled_for: iso });
+  toast(r.ok ? '📅 Reschedule queued — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
 }
 
 // ── Regenerate post with mode selector (image | text | both) ────────────────
@@ -723,8 +756,8 @@ async function regeneratePost(postId, mode, notesElId) {
   toast('Triggering regeneration…');
   const inputs = { post_id: String(postId), mode };
   if (notes) inputs.notes = notes;
-  const ok = await triggerWorkflow('regenerate-post.yml', inputs);
-  toast(ok ? toastMsg : '❌ Failed to trigger workflow', 5000);
+  const r = await triggerWorkflow('regenerate-post.yml', inputs);
+  toast(r.ok ? toastMsg : `❌ Failed: ${r.detail}`, 7000);
 }
 
 // ── Legacy regenImage for backward compatibility (delegates to regeneratePost)
@@ -735,8 +768,8 @@ async function regenImage(postId, notesElId = 'regen-notes') {
 async function deletePostTable(postId) {
   if (!confirm(`Mark post ${postId} as deleted?`)) return;
   toast('Deleting…');
-  const ok = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
-  toast(ok ? '🗑 Deletion queued — refresh in ~1 min' : '❌ Failed — check settings', 4000);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
+  toast(r.ok ? '🗑 Deletion queued — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
 }
 
 // ── GALLERY ─────────────────────────────────────────────────────────────────
@@ -744,7 +777,7 @@ function renderGalleryDraft() {
   const cfg = getCfg();
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const container = document.getElementById('gallery-draft-section');
-  const pending = allRows.filter(r => r.status === 'pending').sort((a, b) => {
+  const pending = allRows.filter(r => r.status === 'pending' && r.review_status !== 'archived').sort((a, b) => {
     const sa = a.scheduled_for || a.created_at;
     const sb = b.scheduled_for || b.created_at;
     return sa < sb ? -1 : 1;
@@ -776,6 +809,8 @@ function renderGalleryDraft() {
             <button class="btn btn-primary btn-sm" onclick="copyPostText(${post.id})">📋 Copy Text</button>
             ${imgSrc ? `<button class="btn btn-primary btn-sm" onclick="downloadPostImage(${post.id})">⬇️ Download Image</button>` : ''}
             ${canAct ? `
+            <button class="btn btn-primary btn-sm" onclick="markAsPosted(${post.id})">✅ Mark as Posted</button>
+            <button class="btn btn-warn btn-sm" onclick="moveToGallery(${post.id})">📦 Move to Gallery</button>
             <button class="btn btn-ghost btn-sm" onclick="showTab('pending', document.querySelectorAll('nav button')[0])">Open full review →</button>
             ` : ''}
           </div>

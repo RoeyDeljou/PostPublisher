@@ -16,7 +16,7 @@ on:
         description: "New review status (leave blank to not change)"
         required: false
         type: choice
-        options: ["", pending, approved, rejected]
+        options: ["", pending, approved, rejected, archived]
       scheduled_for:
         description: "New scheduled date, e.g. 2026-07-15T08:00:00Z (leave blank to not change)"
         required: false

@@ -3,8 +3,10 @@
 
 /**
  * Phase 1 — Generate content + image, save as pending.
- * Runs at 06:00 UTC daily, giving a 2-hour review window before auto-publish at 08:00 UTC.
- * Also called by regenerate-image.yml when the user requests a new image with notes.
+ * Runs at 06:00 UTC daily. Publishing is currently manual (daily-post.yml's cron is
+ * disabled) — the new post becomes the featured "Next Post" in the dashboard, auto-
+ * archiving whatever was previously featured so it doesn't get stuck there forever.
+ * Also called by regenerate-post.yml when the user requests a rework with notes.
  *
  * Args:
  *   --post-id N          Regenerate an existing post N
@@ -139,6 +141,18 @@ async function main() {
   });
   console.log(`[generate] Created pending post id=${postId}`);
 
+  // Auto-archive whatever was previously featured as "Next Post" so this new one
+  // takes its place — unless the user already moved it themselves. Posts that are
+  // pending/rejected stay as-is; only the currently-featured (non-archived) ones
+  // get archived, since Gallery/All Posts remain fully browsable regardless.
+  const previouslyFeatured = db.all().filter(p =>
+    p.id !== postId && p.status === 'pending' && p.review_status !== 'archived' && p.review_status !== 'rejected'
+  );
+  for (const p of previouslyFeatured) {
+    db.update(p.id, { reviewStatus: 'archived' });
+    console.log(`[generate] Auto-moved previous post ${p.id} to gallery (archived)`);
+  }
+
   const outputPath = path.join(IMAGES_DIR, `post_${postId}_${Date.now()}.png`);
   let imagePath = null;
   try {
@@ -155,7 +169,7 @@ async function main() {
     console.warn(`[generate] Image failed: ${err.message} — will post text-only`);
   }
 
-  console.log(`[generate] ✅ Post id=${postId} ready for review. Auto-publishes at scheduled time unless rejected.`);
+  console.log(`[generate] ✅ Post id=${postId} ready for review — publishing is manual right now.`);
   console.log(JSON.stringify({ postId, angle: content.angle, imagePath, scheduledFor: content.scheduledFor }));
 }
 

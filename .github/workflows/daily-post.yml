@@ -1,9 +1,10 @@
 name: Publish Daily Post (Phase 2)
 
 on:
-  schedule:
-    - cron: "0 8 * * *"   # 08:00 UTC — auto-publishes unless rejected in dashboard
-  workflow_dispatch:        # manual trigger
+  # Cron disabled — publishing is manual for now (copy/download from the dashboard,
+  # post on LinkedIn yourself, then click "Mark as Posted"). Re-add a schedule here
+  # once automated publishing is ready to turn back on.
+  workflow_dispatch:        # manual trigger only
 
 permissions:
   contents: write
