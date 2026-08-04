@@ -809,6 +809,7 @@ function renderGallery() {
     const angle = (r.angle || '—').substring(0, 60);
     const urnHref = linkedinUrl(r.post_urn);
     const canDelete = canAct && (r.status === 'pending' || r.status === 'failed');
+    const canMarkPosted = canAct && r.status !== 'posted' && r.status !== 'deleted';
     return `<div class="gallery-card">
       <div class="gc-img" ${src ? `onclick="window.open('${esc(src)}','_blank')"` : ''}>
         ${src ? `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
@@ -818,10 +819,13 @@ function renderGallery() {
         <div class="gc-angle">${esc(angle)}</div>
         <div class="gc-footer">
           <span class="status status-${r.status}">${r.status}</span>
-          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank">View on LinkedIn ↗</a>` : ''}
-            ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : ''}
-          </div>
+          ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank">View on LinkedIn ↗</a>` : ''}
+        </div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem">
+          <button class="btn btn-primary btn-sm" onclick="copyPostText(${r.id})">📋 Copy</button>
+          ${src ? `<button class="btn btn-primary btn-sm" onclick="downloadPostImage(${r.id})">⬇️ Save</button>` : ''}
+          ${canMarkPosted ? `<button class="btn btn-primary btn-sm" onclick="markAsPosted(${r.id})">✅ Mark Posted</button>` : ''}
+          ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -832,6 +836,8 @@ function renderGallery() {
 function renderTable() {
   const search = document.getElementById('search').value.toLowerCase();
   const filterStatus = document.getElementById('filter-status').value;
+  const cfg = getCfg();
+  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
     if (filterStatus && r.status !== filterStatus) return false;
     if (search) {
@@ -848,6 +854,9 @@ function renderTable() {
     const urnHref = linkedinUrl(r.post_urn);
     const urnLink = urnHref
       ? `<a class="urn-link" href="${urnHref}" target="_blank" title="${esc(r.post_urn)}">View ↗</a>` : '—';
+    const canMarkPosted = canAct && r.status !== 'posted' && r.status !== 'deleted';
+    const markPostedBtn = canMarkPosted
+      ? `<button class="btn btn-primary btn-sm" onclick="markAsPosted(${r.id})">✅ Posted</button>` : '';
     const deleteBtn = r.status === 'pending'
       ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : '';
     return `<tr>
@@ -858,7 +867,7 @@ function renderTable() {
       <td>${angle}</td>
       <td class="body-cell" title="${esc(r.body||'')}">${body}</td>
       <td>${urnLink}</td>
-      <td>${deleteBtn}</td>
+      <td style="display:flex;gap:.4rem;flex-wrap:wrap">${markPostedBtn}${deleteBtn}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem">No posts found</td></tr>`;
 }
