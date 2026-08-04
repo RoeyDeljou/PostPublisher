@@ -140,10 +140,10 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, size, size);
 
-  // ── 3. Brand mark — logo or company name only, position/style rotates each
-  // time so the same treatment doesn't appear on every post. No topic labels
-  // or full brand-name text are ever drawn on the image itself. No added
-  // bars, strips, or frames — this sits directly on the photo.
+  // ── 3. Brand mark — the company logo appears on every image when the logo
+  // file exists (position rotates for visual variety); falls back to the
+  // company name as text only if the logo file is genuinely missing. No
+  // topic labels or added bars/strips/frames — this sits directly on the photo.
   const hasLogo = fs.existsSync(LOGO_PATH);
 
   async function drawLogoAt(x, y, logoSize) {
@@ -161,25 +161,17 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     drawTextWithShadow(ctx, 'ML-Innovation', x, y, 'rgba(0,0,0,0.6)', 8);
   }
 
-  // An explicit request in the notes (e.g. "put the logo in the top left")
-  // overrides the normal random rotation instead of being ignored.
+  // An explicit position request in the notes (e.g. "put the logo in the top
+  // left") picks the side; otherwise it rotates randomly for visual variety.
   const notesLower = (notes || '').toLowerCase();
-  const wantsLogo = /\blogo\b/.test(notesLower);
-  const wantsName = /\bname\b|\bml-innovation\b/.test(notesLower);
   const wantsTopRight = /top[\s-]?right/.test(notesLower);
   const wantsTopLeft = /top[\s-]?left/.test(notesLower);
 
   let treatment;
-  if (wantsLogo && hasLogo) treatment = wantsTopRight ? 'logo-top-right' : 'logo-top-left';
-  else if (wantsName) treatment = wantsTopRight ? 'name-top-right' : 'name-top-left';
-  else if (wantsTopLeft) treatment = hasLogo ? 'logo-top-left' : 'name-top-left';
+  if (wantsTopLeft) treatment = hasLogo ? 'logo-top-left' : 'name-top-left';
   else if (wantsTopRight) treatment = hasLogo ? 'logo-top-right' : 'name-top-right';
-  else {
-    const treatments = hasLogo
-      ? ['logo-top-left', 'logo-top-right', 'name-top-left', 'name-top-right']
-      : ['name-top-left', 'name-top-right'];
-    treatment = treatments[Math.floor(Math.random() * treatments.length)];
-  }
+  else if (hasLogo) treatment = Math.random() < 0.5 ? 'logo-top-left' : 'logo-top-right';
+  else treatment = Math.random() < 0.5 ? 'name-top-left' : 'name-top-right';
 
   try {
     if (treatment === 'logo-top-left') await drawLogoAt(28, 28, 72);
