@@ -54,8 +54,7 @@ async function main() {
     // NOT a revision of the existing post. Same post id, entirely new content.
     if (mode === 'both') {
       const recentPosts = db.recent(7);
-      const recentBodies = recentPosts.map(p => p.body);
-      const content = await generateContent(recentBodies, notes);
+      const content = await generateContent(recentPosts, notes);
 
       const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
       const newImagePath = await buildImage({
@@ -155,8 +154,7 @@ async function main() {
   // ── Fresh generation mode ──────────────────────────────────────────────────
   console.log('[generate] Generating new post content via Claude Haiku...');
   const recentPosts = db.recent(7);
-  const recentBodies = recentPosts.map(p => p.body);
-  const content = await generateContent(recentBodies, notes);
+  const content = await generateContent(recentPosts, notes);
 
   console.log(`[generate] Angle: ${content.angle}`);
   console.log(`[generate] Headline: ${content.headlineText}`);

@@ -3,7 +3,9 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { getActiveTemplate } = require('./templates');
-const { nextSport } = require('./rotation');
+const { nextSport, nextTopic } = require('./rotation');
+
+const WEB_SEARCH_TOOL = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }];
 
 const TOPIC_POOL = [
   'AI injury prediction and athlete load management',
@@ -38,7 +40,9 @@ const SPORT_POOL = [
   'winter sports (skiing/hockey)',
 ];
 
-const SYSTEM_PROMPT = `You are the LinkedIn content strategist for "Elite Sports AI Forge" — a brand at the intersection of artificial intelligence and professional sport.
+const SYSTEM_PROMPT = `You are the LinkedIn content strategist for "ML-Innovation" — a company at the intersection of artificial intelligence and professional sport.
+
+NEVER write "Elite Sports AI Forge" anywhere in the post — that name does not exist and must never appear. If the post needs to name the company at all (rare — most posts shouldn't), the company is called "ML-Innovation".
 
 Your task: write a high-engagement, scroll-stopping LinkedIn post and return ONLY a valid JSON object. No markdown fences. No explanation.
 
@@ -59,9 +63,11 @@ NEVER open with "I'm excited to share", "In today's world", or any generic scene
 POST STRUCTURE:
 1. The hook line (see above)
 2. 3-4 short paragraphs (2-4 sentences each), blank line between each — vary sentence length deliberately: mix punchy one-liners with longer explanatory sentences for rhythm (pattern interrupt), don't let every paragraph read the same length
-3. One concrete example, stat, or case study in paragraph 3 — specific team/company/number, not a vague generality
+3. One concrete example, stat, or case study in paragraph 3 — grounded in REAL data from your web_search results (see DATA INTEGRITY below), naming the actual source in prose
 4. CTA closing line — specific and action-oriented, tied to the post's actual content (e.g. "Which of these three signals is your team already tracking?" not a generic "What do you think?")
 5. 4-6 hashtags on final line
+
+DATA INTEGRITY — you have a web_search tool. Use it at least once per post to find one real, specific, recent statistic, study finding, or case study relevant to this post's topic and sport. NEVER invent a specific number, percentage, or named case study — every specific figure in the post must come from an actual search result. If search doesn't turn up a solid, relevant figure, fall back to qualitative language ("a growing number of clubs", "a noticeable drop in soft-tissue injuries") instead of a fabricated precise number. When citing the stat, name the actual source in natural prose (the league, publication, study, or organization — e.g. "the NFL's own 2024 injury data showed...") rather than pasting a raw URL, which reads as spammy on LinkedIn. Prefer authoritative sources (leagues, official team statements, peer-reviewed research, established sports-science or industry publications) over random blogs when multiple results are available. After searching, your final message must be ONLY the JSON object — no preamble, no commentary about your search, no markdown fences.
 
 IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same look every time:
 - SPORT FOR THIS IMAGE: the user message specifies an exact sport below — build the imagePrompt around THAT sport only, don't substitute a different one (it's assigned by a fixed rotation outside your control, precisely so sports don't repeat). The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport is specified; don't default to soccer.
@@ -78,7 +84,7 @@ HEADLINE TEXT — this is overlaid boldly on the image itself. It MUST be short 
 
 JSON schema (return EXACTLY this shape):
 {
-  "angle": "<topic angle>",
+  "angle": "<SPECIFIC narrow issue within the assigned topic field — not a repeat of a recently covered angle>",
   "body": "<full post text — plain text only, no markdown>",
   "hashtags": ["#Tag1", "#Tag2"],
   "imagePrompt": "<background image prompt — specific sport, varied composition, per IMAGE PROMPT RULES>",
@@ -95,23 +101,41 @@ function sanitizeBody(body) {
     .trim();
 }
 
+// With the web_search tool enabled, the response contains extra content blocks
+// (server_tool_use, web_search_tool_result) ahead of the assistant's prose — the
+// final JSON answer is the LAST text-type block, not necessarily content[0]. That
+// block also often isn't PURE JSON despite instructions: the model tends to add a
+// stray line of commentary before a fenced ```json block after a search turn, so
+// extract the JSON substring rather than assuming the whole block is clean JSON.
 function parseClaudeJson(response) {
-  const raw = response.content[0].text.trim();
-  const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-  return JSON.parse(cleaned);
+  const textBlocks = response.content.filter(b => b.type === 'text');
+  if (!textBlocks.length) throw new Error('No text content in Claude response');
+  const raw = textBlocks[textBlocks.length - 1].text.trim();
+
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) return JSON.parse(fenced[1].trim());
+
+  const firstBrace = raw.indexOf('{');
+  const lastBrace = raw.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return JSON.parse(raw.slice(firstBrace, lastBrace + 1));
+  }
+
+  return JSON.parse(raw);
 }
 
 // LLM "JSON" occasionally breaks (e.g. a stray unescaped quote inside a text field)
 // despite the prompt instructing against it — retry the whole call rather than
 // attempt fragile regex repair on malformed JSON.
-async function callClaudeForJson(client, systemPrompt, userMessage, retries = 2) {
+async function callClaudeForJson(client, systemPrompt, userMessage, { retries = 2, tools = undefined } = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= retries; attempt++) {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
+      max_tokens: tools ? 2500 : 1200,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
+      ...(tools ? { tools } : {}),
     });
     try {
       return parseClaudeJson(response);
@@ -122,12 +146,15 @@ async function callClaudeForJson(client, systemPrompt, userMessage, retries = 2)
   throw lastErr;
 }
 
-async function generateContent(recentBodies = [], regenerationNotes = null) {
+// recentPosts: array of { angle, body } from the most recent posts (any status),
+// used to steer both topic-field variety and sport-image variety.
+async function generateContent(recentPosts = [], regenerationNotes = null) {
   const client = new Anthropic();
   const sport = nextSport(SPORT_POOL);
+  const field = nextTopic(TOPIC_POOL);
 
-  const avoidTopics = recentBodies.length > 0
-    ? `\n\nRECENT POSTS TO AVOID REPEATING:\n${recentBodies.slice(0, 7).map((b, i) => `${i + 1}. ${b.substring(0, 120)}...`).join('\n')}`
+  const avoidSection = recentPosts.length > 0
+    ? `\n\nRECENTLY COVERED (do NOT repeat these angles — if this post lands in the same field, tackle a clearly different specific issue or sub-problem instead):\n${recentPosts.slice(0, 7).map((p, i) => `${i + 1}. [${p.angle || '?'}] ${(p.body || '').substring(0, 100)}...`).join('\n')}`
     : '';
 
   const tomorrow = new Date();
@@ -146,14 +173,13 @@ async function generateContent(recentBodies = [], regenerationNotes = null) {
   const userMessage = `Today's date: ${new Date().toISOString().split('T')[0]}
 Scheduled for: ${scheduledFor}
 
-Available topic pool (pick one not used recently):
-${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}
+TOPIC FIELD FOR THIS POST: ${field} — write about a SPECIFIC, narrow issue or angle within this field (don't just restate the field name as the angle).${avoidSection}
 
 SPORT FOR THIS IMAGE: ${sport} — use this exact sport in imagePrompt, see IMAGE PROMPT RULES.${notesSection}${styleSection}
 
-Generate the LinkedIn post. Return only JSON.`;
+Search the web for one real, specific, recent stat or case study relevant to this field and sport, then generate the LinkedIn post. Return only JSON.`;
 
-  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage);
+  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL });
   payload.body = sanitizeBody(payload.body);
 
   if (!payload.scheduledFor) payload.scheduledFor = scheduledFor;
@@ -191,9 +217,11 @@ CURRENT HASHTAGS: ${existingHashtags || '(none)'}
 CURRENT IMAGE PROMPT: ${existingPost.imagePrompt || '(none)'}
 ${notesSection}${styleSection}
 
+If the current body already contains a specific stat, keep it only if it's genuinely real — if you're not confident it came from a real source, replace it with a real one found via web_search (or fall back to qualitative language per DATA INTEGRITY rules) rather than leaving a fabricated number in place.
+
 Revise this post. Return only JSON with the same schema as before (angle, body, hashtags, imagePrompt, imageEngagementText, headlineText) — omit scheduledFor, the caller keeps the original.`;
 
-  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage);
+  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL });
   payload.body = sanitizeBody(payload.body);
 
   if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
@@ -204,6 +232,7 @@ Revise this post. Return only JSON with the same schema as before (angle, body, 
 }
 
 if (require.main === module) {
+  // recentArg: JSON array of { angle, body } objects, e.g. '[{"angle":"...","body":"..."}]'
   const recentArg = process.argv[2] ? JSON.parse(process.argv[2]) : [];
   const notes = process.argv[3] || null;
   generateContent(recentArg, notes)
