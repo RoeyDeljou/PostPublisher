@@ -153,7 +153,7 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   const wantsPeople = peopleWords.test(notes || '') || peopleWords.test(prompt || '');
   const safePrompt = wantsPeople
     ? `${prompt}, photorealistic, natural body proportions, professional sports photography, dynamic action, generic unbranded athletic wear, no real team logos, no sponsor branding, no readable text`
-    : `${prompt}, no people, no human figures, no faces, no bodies, abstract, highly detailed, no text, no logos`;
+    : `${prompt}, no people, no human figures, no faces, no bodies, photorealistic, highly detailed, sharp focus, no text, no logos`;
 
   try {
     await fetchOpenAIBackground(safePrompt, bgTemp);

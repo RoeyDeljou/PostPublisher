@@ -124,7 +124,8 @@ async function main() {
   console.log('[generate] Generating new post content via Claude Haiku...');
   const recentPosts = db.recent(7);
   const recentBodies = recentPosts.map(p => p.body);
-  const content = await generateContent(recentBodies, notes);
+  const recentImagePrompts = recentPosts.map(p => p.image_prompt).filter(Boolean);
+  const content = await generateContent(recentBodies, notes, recentImagePrompts);
 
   console.log(`[generate] Angle: ${content.angle}`);
   console.log(`[generate] Headline: ${content.headlineText}`);

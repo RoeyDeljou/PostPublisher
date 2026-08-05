@@ -9,7 +9,7 @@ const TOPIC_POOL = [
   'Computer vision in match analysis — player tracking and heatmaps',
   'AI-powered scouting and talent identification',
   'Fan engagement personalization via machine learning',
-  'AI in referee and VAR decision support',
+  'AI in referee and officiating decision support',
   'Wearables and AI for real-time athlete biometrics',
   'AI-powered training periodization and recovery optimization',
   'Generative AI for sports media and commentary',
@@ -17,6 +17,24 @@ const TOPIC_POOL = [
   'Ethics of AI in sport — fairness and data privacy',
   'AI performance analysis in esports',
   'Sports nutrition optimization via machine learning',
+];
+
+// The topic angle above is sport-agnostic; the SPORT is a separate axis that should
+// rotate independently so the same "soccer training pitch" image doesn't recur every post.
+const SPORT_POOL = [
+  'soccer/football',
+  'basketball',
+  'tennis',
+  'American football',
+  'track & field / athletics',
+  'swimming',
+  'baseball',
+  'golf',
+  'cricket',
+  'cycling',
+  'boxing / combat sports',
+  'esports',
+  'winter sports (skiing/hockey)',
 ];
 
 const SYSTEM_PROMPT = `You are the LinkedIn content strategist for "Elite Sports AI Forge" — a brand at the intersection of artificial intelligence and professional sport.
@@ -44,10 +62,11 @@ POST STRUCTURE:
 4. CTA closing line — specific and action-oriented, tied to the post's actual content (e.g. "Which of these three signals is your team already tracking?" not a generic "What do you think?")
 5. 4-6 hashtags on final line
 
-IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same abstract data-viz look every time:
-- Vary the composition type based on what actually fits THIS topic — don't default to "glowing neural network" for everything. Options include: real athletes/players training or competing (soccer players on a pitch, a sprinter mid-stride, a coach reviewing footage), stadium or training-ground scenes, sport equipment close-ups, wearable tech on an athlete, data visualizations and dashboards, abstract geometric sport shapes, particle fields. Pick whichever genuinely suits the angle.
-- Human figures and athletes ARE allowed and often make the strongest, most relevant image for a sports topic — use them when the topic calls for it (scouting, training, injury prevention, officiating, etc. are all naturally people-centric). When you do include people, describe them concretely and photorealistically (e.g. "a soccer player mid-sprint on a floodlit pitch at night, motion blur on the legs, coach staff reviewing a tablet on the sideline") so the renderer has a clear, natural scene to work with rather than an ambiguous one.
-- Style: cinematic, dark navy or deep sport colors, high-tech, photorealistic where possible
+IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same look every time:
+- SPORT ROTATION: pick ONE specific sport for this image from: ${SPORT_POOL.join(', ')}. Check the recent posts/images list below and do NOT reuse the same sport as any of them — rotate to something different each time. The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport you choose; don't default to soccer.
+- Vary the composition type based on what genuinely fits THIS topic and sport — don't default to "glowing neural network" for everything, and don't default to people training every time either. Good options: real athletes/players training or competing in the chosen sport, stadium/arena/court/track scenes, sport-specific equipment close-ups (a basketball mid-shot through the net, tennis racquet strings, cleats and turf, a cycling helmet), wearable tech on an athlete, data visualizations and dashboards, abstract geometric sport shapes, particle fields. Pick whichever genuinely suits the angle and sport.
+- Humans are NOT required. When the topic or sport is better served without people, use something concrete and relevant instead (equipment, venue, gear, a scoreboard, a court/pitch/track from a striking angle) — avoid generic abstract data-viz as the default fallback; make even the no-people option feel specific to the chosen sport and topic. When you DO include people, describe them concretely and photorealistically (e.g. "a point guard mid-jump-shot in an arena, motion blur on the arm, floodlights overhead") so the renderer has a clear, natural scene to work with rather than an ambiguous one.
+- Style: cinematic, high-tech, photorealistic where possible — vary the color palette to suit the chosen sport/venue rather than always dark navy (e.g. warm clay-court tones for tennis, bright arena lighting for basketball, outdoor daylight for cycling/track).
 - Be specific and concrete rather than generic — name an actual composition and setting rather than vague descriptors alone
 - Include 2-3 technical quality terms that consistently improve output fidelity: cinematic lighting, volumetric light, 8k detail, sharp focus, professional render, natural body proportions (when depicting people)
 - Keep a single clear focal point — a cluttered composition with too many competing elements renders worse than one strong idea
@@ -61,7 +80,7 @@ JSON schema (return EXACTLY this shape):
   "angle": "<topic angle>",
   "body": "<full post text — plain text only, no markdown>",
   "hashtags": ["#Tag1", "#Tag2"],
-  "imagePrompt": "<Pollinations/Flux background prompt — abstract, no people>",
+  "imagePrompt": "<background image prompt — specific sport, varied composition, per IMAGE PROMPT RULES>",
   "imageEngagementText": "<short punchy overlay line, max 8 words, different from headlineText>",
   "headlineText": "<max 60 char main headline for image overlay>",
   "scheduledFor": "<ISO8601 tomorrow at 08:00 UTC>"
@@ -102,11 +121,15 @@ async function callClaudeForJson(client, systemPrompt, userMessage, retries = 2)
   throw lastErr;
 }
 
-async function generateContent(recentBodies = [], regenerationNotes = null) {
+async function generateContent(recentBodies = [], regenerationNotes = null, recentImagePrompts = []) {
   const client = new Anthropic();
 
   const avoidTopics = recentBodies.length > 0
     ? `\n\nRECENT POSTS TO AVOID REPEATING:\n${recentBodies.slice(0, 7).map((b, i) => `${i + 1}. ${b.substring(0, 120)}...`).join('\n')}`
+    : '';
+
+  const avoidSports = recentImagePrompts.length > 0
+    ? `\n\nRECENT IMAGE PROMPTS (avoid reusing the same sport or composition as these):\n${recentImagePrompts.slice(0, 7).map((p, i) => `${i + 1}. ${p}`).join('\n')}`
     : '';
 
   const tomorrow = new Date();
@@ -126,7 +149,7 @@ async function generateContent(recentBodies = [], regenerationNotes = null) {
 Scheduled for: ${scheduledFor}
 
 Available topic pool (pick one not used recently):
-${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}${notesSection}${styleSection}
+${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}${avoidSports}${notesSection}${styleSection}
 
 Generate the LinkedIn post. Return only JSON.`;
 

@@ -101,7 +101,7 @@ const ops = {
   recent(n = 7) {
     const db = openDb();
     const rows = db.prepare(
-      `SELECT id, created_at, angle, body, hashtags, status, review_status, post_urn, image_path, engagement_text, scheduled_for
+      `SELECT id, created_at, angle, body, hashtags, status, review_status, post_urn, image_path, image_prompt, engagement_text, scheduled_for
        FROM posts WHERE status NOT IN ('deleted') ORDER BY created_at DESC LIMIT ?`
     ).all(Number(n));
     db.close();
