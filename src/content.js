@@ -73,7 +73,7 @@ IMAGE PROMPT RULES — the prompt is for a background image, and it should be vi
 - Never ask for text, logos, or watermarks in the image itself — headline text and branding are added separately afterward, and AI-rendered text usually comes out garbled
 - Never name a real club, league, sponsor, or brand (e.g. don't write "Liverpool's training ground" or "wearing a Nike kit") — the image renderer is photorealistic enough to actually reproduce real logos/trademarks, which is a legal risk for a business page. Describe scenes generically instead ("a professional soccer club's training ground", "a generic dark athletic kit")
 
-HEADLINE TEXT — this is overlaid boldly on the image itself (max 60 chars), so it should read like the punchiest possible summary of the hook: short, bold, high-contrast phrasing — think chart-topping headline, not a full sentence.
+HEADLINE TEXT — this is overlaid boldly on the image itself. It MUST be short and sharp: 3-6 words, under 40 characters, no full sentences and minimal punctuation. Distill the hook down to its punchiest fragment rather than reusing it verbatim — e.g. "AI SEES INJURIES FIRST" or "THE SCOUT THAT NEVER SLEEPS", not "How AI Is Changing The Way Teams Predict And Prevent Injuries". If you can't get it under 40 characters, cut words until you can — a shorter, punchier headline always beats a longer, more complete one. NEVER include emojis in headlineText or imageEngagementText — the image renderer has no emoji font and will render them as broken boxes; emojis are fine in the post body only.
 
 JSON schema (return EXACTLY this shape):
 {
@@ -82,7 +82,7 @@ JSON schema (return EXACTLY this shape):
   "hashtags": ["#Tag1", "#Tag2"],
   "imagePrompt": "<background image prompt — specific sport, varied composition, per IMAGE PROMPT RULES>",
   "imageEngagementText": "<short punchy overlay line, max 8 words, different from headlineText>",
-  "headlineText": "<max 60 char main headline for image overlay>",
+  "headlineText": "<3-6 words, under 40 chars, punchy image overlay headline>",
   "scheduledFor": "<ISO8601 tomorrow at 08:00 UTC>"
 }`;
 

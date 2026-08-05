@@ -20,6 +20,7 @@ const INIT_SQL = `
     image_path TEXT,
     image_prompt TEXT,
     engagement_text TEXT,
+    headline_text TEXT,
     asset_urn TEXT,
     post_urn TEXT,
     error TEXT,
@@ -48,6 +49,7 @@ function openDb() {
   if (!cols.includes('engagement_text')) db.exec("ALTER TABLE posts ADD COLUMN engagement_text TEXT");
   if (!cols.includes('approved_at')) db.exec("ALTER TABLE posts ADD COLUMN approved_at TEXT");
   if (!cols.includes('regeneration_notes')) db.exec("ALTER TABLE posts ADD COLUMN regeneration_notes TEXT");
+  if (!cols.includes('headline_text')) db.exec("ALTER TABLE posts ADD COLUMN headline_text TEXT");
   return db;
 }
 
@@ -55,8 +57,8 @@ const ops = {
   insert(data) {
     const db = openDb();
     const stmt = db.prepare(`
-      INSERT INTO posts (angle, body, hashtags, image_path, image_prompt, engagement_text, scheduled_for, status, review_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')
+      INSERT INTO posts (angle, body, hashtags, image_path, image_prompt, engagement_text, headline_text, scheduled_for, status, review_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')
     `);
     const result = stmt.run(
       data.angle || null,
@@ -65,6 +67,7 @@ const ops = {
       data.imagePath || null,
       data.imagePrompt || null,
       data.engagementText || null,
+      data.headlineText || null,
       data.scheduledFor || null,
     );
     db.close();
@@ -80,6 +83,7 @@ const ops = {
       regenerationNotes: 'regeneration_notes', body: 'body',
       engagementText: 'engagement_text', scheduledFor: 'scheduled_for',
       angle: 'angle', hashtags: 'hashtags', imagePrompt: 'image_prompt',
+      headlineText: 'headline_text',
     };
     const allowed = Object.values(fieldMap);
     const setClauses = [];

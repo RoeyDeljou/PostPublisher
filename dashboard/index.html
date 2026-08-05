@@ -214,7 +214,7 @@
 <nav>
   <button class="active" onclick="showTab('pending',this)">📋 Next Post</button>
   <button onclick="showTab('gallery',this)">🖼 Gallery</button>
-  <button onclick="showTab('all',this)">📊 All Posts</button>
+  <button onclick="showTab('all',this)">✅ Posted</button>
   <button onclick="showTab('templates',this)">🎨 Templates</button>
 </nav>
 
@@ -242,7 +242,6 @@
       <select id="gallery-filter" onchange="renderGallery()">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
-        <option value="posted">Posted</option>
         <option value="failed">Failed</option>
         <option value="deleted">Deleted</option>
       </select>
@@ -251,22 +250,16 @@
     <div class="gallery-grid" id="gallery-grid"></div>
   </div>
 
-  <!-- ── TAB: ALL POSTS ─────────────────────────────────────────────── -->
+  <!-- ── TAB: POSTED ─────────────────────────────────────────────────── -->
   <div class="panel" id="panel-all">
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">Posts you've marked as posted. Read-only — click a row to view the full post, but it can't be regenerated, edited, or deleted from here.</p>
     <div class="table-controls">
-      <input type="text" id="search" placeholder="Search posts…" oninput="renderTable()" />
-      <select id="filter-status" onchange="renderTable()">
-        <option value="">All statuses</option>
-        <option value="pending">Pending</option>
-        <option value="posted">Posted</option>
-        <option value="failed">Failed</option>
-        <option value="deleted">Deleted</option>
-      </select>
+      <input type="text" id="search" placeholder="Search posted…" oninput="renderTable()" />
     </div>
     <div class="table-wrapper">
       <table id="posts-table">
         <thead><tr>
-          <th>ID</th><th>Status</th><th>Date</th><th>Scheduled</th><th>Topic</th><th>Preview</th><th>LinkedIn</th><th>Actions</th>
+          <th>ID</th><th>Date</th><th>Topic</th><th>Preview</th><th>LinkedIn</th>
         </tr></thead>
         <tbody id="posts-body"></tbody>
       </table>
@@ -316,6 +309,11 @@
       <button class="btn btn-primary" onclick="saveSettings()">Save</button>
     </div>
   </div>
+</div>
+
+<!-- Post Detail Modal -->
+<div class="modal-bg" id="post-modal" onclick="if(event.target===this) closePostModal()">
+  <div class="modal" style="width:min(720px,95vw);max-height:90vh;overflow-y:auto" id="post-modal-content"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -752,12 +750,14 @@ async function regeneratePost(postId, mode, notesElId) {
   if (!confirm(`Regenerate ${modeLabel} for post ${postId}?\n${notes ? 'Notes: ' + notes : 'No notes — will use original content.'}`)) return;
   const toastMsg = mode === 'image' ? '🖼 Regenerating image — refresh in ~2 min'
                  : mode === 'text' ? '✏️ Regenerating text — refresh in ~1 min'
-                 : '✨ Regenerating text + image — refresh in ~2 min';
+                 : '✨ Regenerating text + image — this runs two API calls back to back, give it ~3-4 min';
   toast('Triggering regeneration…');
   const inputs = { post_id: String(postId), mode };
   if (notes) inputs.notes = notes;
   const r = await triggerWorkflow('regenerate-post.yml', inputs);
-  toast(r.ok ? toastMsg : `❌ Failed: ${r.detail}`, 7000);
+  const cfg = getCfg();
+  const runsUrl = cfg.owner && cfg.repo ? ` — check progress: github.com/${cfg.owner}/${cfg.repo}/actions/workflows/regenerate-post.yml` : '';
+  toast(r.ok ? toastMsg + runsUrl : `❌ Failed: ${r.detail}`, 9000);
 }
 
 // ── Legacy regenImage for backward compatibility (delegates to regeneratePost)
@@ -771,6 +771,56 @@ async function deletePostTable(postId) {
   const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
   toast(r.ok ? '🗑 Deletion queued — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
 }
+
+// ── POST DETAIL MODAL (full image + full text + regenerate-if-not-posted) ───
+function openPostModal(postId) {
+  const post = allRows.find(r => r.id === postId);
+  if (!post) return;
+  const cfg = getCfg();
+  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
+  const isLocked = post.status === 'posted' || post.status === 'deleted';
+  const imgSrc = post.image_path ? imageUrl(post.image_path) : null;
+  const hashtags = tryParseJson(post.hashtags, []);
+  const urnHref = linkedinUrl(post.post_urn);
+  const notesId = 'modal-regen-notes';
+  const canDelete = canAct && (post.status === 'pending' || post.status === 'failed');
+
+  document.getElementById('post-modal-content').innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem">
+      <div>
+        <h2 style="font-size:1.1rem;font-weight:700">${esc(post.angle || ('Post #' + post.id))} <span class="status status-${post.status}">${post.status}</span></h2>
+        <div class="schedule-info">Post ID: ${post.id} · ${esc((post.created_at||'').split('T')[0])}${urnHref ? ` · <a class="urn-link" href="${urnHref}" target="_blank" onclick="event.stopPropagation()">View on LinkedIn ↗</a>` : ''}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closePostModal()">✕ Close</button>
+    </div>
+    ${imgSrc ? `<div class="preview-image-wrap" style="border-radius:8px;margin-bottom:1rem"><img src="${esc(imgSrc)}" alt="Post image" /></div>` : ''}
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-label">Post text</div>
+      <div style="white-space:pre-wrap;font-size:.9rem;line-height:1.55">${esc(post.body || '—')}</div>
+      <div class="hashtags-row" style="margin-top:.6rem">${hashtags.map(h=>`<span class="hashtag">${esc(h)}</span>`).join('')}</div>
+    </div>
+    <div class="action-row" style="margin-bottom:${isLocked ? '0' : '1rem'}">
+      <button class="btn btn-primary btn-sm" onclick="copyPostText(${post.id})">📋 Copy Text</button>
+      ${imgSrc ? `<button class="btn btn-primary btn-sm" onclick="downloadPostImage(${post.id})">⬇️ Download Image</button>` : ''}
+      ${!isLocked && canAct ? `<button class="btn btn-primary btn-sm" onclick="markAsPosted(${post.id})">✅ Mark as Posted</button>` : ''}
+      ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${post.id})">🗑 Delete</button>` : ''}
+    </div>
+    ${isLocked
+      ? `<p style="font-size:.8rem;color:var(--muted)">${post.status === 'posted' ? '🔒 This post is already live on LinkedIn — locked from further edits.' : 'This post is deleted.'}</p>`
+      : (canAct ? `
+    <div class="card">
+      <div class="card-label">Regenerate</div>
+      <textarea class="notes" id="${notesId}" placeholder="Describe what to improve — image style, wording, or both…"></textarea>
+      <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'image', '${notesId}')">🖼 Image Only</button>
+        <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'text', '${notesId}')">✏️ Text Only</button>
+        <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', '${notesId}')">✨ Both</button>
+      </div>
+    </div>` : `<p style="font-size:.8rem;color:var(--muted)">Configure GitHub settings to regenerate from here.</p>`)}
+  `;
+  document.getElementById('post-modal').classList.add('open');
+}
+function closePostModal(){ document.getElementById('post-modal').classList.remove('open'); }
 
 // ── GALLERY ─────────────────────────────────────────────────────────────────
 function renderGalleryDraft() {
@@ -797,7 +847,7 @@ function renderGalleryDraft() {
         <div style="width:200px;flex-shrink:0">
           <div class="preview-image-wrap" style="border-radius:8px;aspect-ratio:1">
             ${imgSrc
-              ? `<img src="${esc(imgSrc)}" alt="Next day draft" style="cursor:pointer" onclick="window.open('${esc(imgSrc)}','_blank')" />`
+              ? `<img src="${esc(imgSrc)}" alt="Next day draft" style="cursor:pointer" onclick="openPostModal(${post.id})" />`
               : `<div class="img-placeholder" style="font-size:.75rem">Image generating…</div>`}
           </div>
         </div>
@@ -834,6 +884,7 @@ function renderGallery() {
   const cfg = getCfg();
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
+    if (r.status === 'posted') return false; // posted posts live in the Posted tab instead
     if (filter && r.status !== filter) return false;
     return !!r.image_path;
   });
@@ -845,8 +896,8 @@ function renderGallery() {
     const urnHref = linkedinUrl(r.post_urn);
     const canDelete = canAct && (r.status === 'pending' || r.status === 'failed');
     const canMarkPosted = canAct && r.status !== 'posted' && r.status !== 'deleted';
-    return `<div class="gallery-card">
-      <div class="gc-img" ${src ? `onclick="window.open('${esc(src)}','_blank')"` : ''}>
+    return `<div class="gallery-card" style="cursor:pointer" onclick="openPostModal(${r.id})">
+      <div class="gc-img">
         ${src ? `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
       </div>
       <div class="gc-body">
@@ -854,9 +905,9 @@ function renderGallery() {
         <div class="gc-angle">${esc(angle)}</div>
         <div class="gc-footer">
           <span class="status status-${r.status}">${r.status}</span>
-          ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank">View on LinkedIn ↗</a>` : ''}
+          ${urnHref ? `<a class="urn-link" href="${urnHref}" target="_blank" onclick="event.stopPropagation()">View on LinkedIn ↗</a>` : ''}
         </div>
-        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem" onclick="event.stopPropagation()">
           <button class="btn btn-primary btn-sm" onclick="copyPostText(${r.id})">📋 Copy</button>
           ${src ? `<button class="btn btn-primary btn-sm" onclick="downloadPostImage(${r.id})">⬇️ Save</button>` : ''}
           ${canMarkPosted ? `<button class="btn btn-primary btn-sm" onclick="markAsPosted(${r.id})">✅ Mark Posted</button>` : ''}
@@ -867,14 +918,11 @@ function renderGallery() {
   }).join('') || '<p style="color:var(--muted);padding:2rem">No images found.</p>';
 }
 
-// ── ALL POSTS TABLE ──────────────────────────────────────────────────────────
+// ── POSTED TABLE (read-only — posted posts only) ─────────────────────────────
 function renderTable() {
   const search = document.getElementById('search').value.toLowerCase();
-  const filterStatus = document.getElementById('filter-status').value;
-  const cfg = getCfg();
-  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
-    if (filterStatus && r.status !== filterStatus) return false;
+    if (r.status !== 'posted') return false;
     if (search) {
       const hay = `${r.body||''} ${r.angle||''} ${r.post_urn||''}`.toLowerCase();
       if (!hay.includes(search)) return false;
@@ -882,29 +930,20 @@ function renderTable() {
     return true;
   });
   document.getElementById('posts-body').innerHTML = rows.map(r => {
-    const date = (r.created_at||'').split('T')[0];
-    const scheduled = (r.scheduled_for||'').split('T')[0] || '—';
+    const date = (r.posted_at || r.created_at || '').split('T')[0];
     const body = esc((r.body||'').substring(0,80) + ((r.body||'').length>80?'…':''));
     const angle = esc((r.angle||'—').substring(0,45));
     const urnHref = linkedinUrl(r.post_urn);
     const urnLink = urnHref
-      ? `<a class="urn-link" href="${urnHref}" target="_blank" title="${esc(r.post_urn)}">View ↗</a>` : '—';
-    const canMarkPosted = canAct && r.status !== 'posted' && r.status !== 'deleted';
-    const markPostedBtn = canMarkPosted
-      ? `<button class="btn btn-primary btn-sm" onclick="markAsPosted(${r.id})">✅ Posted</button>` : '';
-    const deleteBtn = r.status === 'pending'
-      ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${r.id})">Delete</button>` : '';
-    return `<tr>
+      ? `<a class="urn-link" href="${urnHref}" target="_blank" title="${esc(r.post_urn)}" onclick="event.stopPropagation()">View ↗</a>` : '—';
+    return `<tr style="cursor:pointer" onclick="openPostModal(${r.id})">
       <td>${r.id}</td>
-      <td><span class="status status-${r.status}">${r.status}</span></td>
       <td>${date}</td>
-      <td>${scheduled}</td>
       <td>${angle}</td>
       <td class="body-cell" title="${esc(r.body||'')}">${body}</td>
       <td>${urnLink}</td>
-      <td style="display:flex;gap:.4rem;flex-wrap:wrap">${markPostedBtn}${deleteBtn}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem">No posts found</td></tr>`;
+  }).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">No posted posts yet</td></tr>`;
 }
 
 // ── TEMPLATES ─────────────────────────────────────────────────────────────────

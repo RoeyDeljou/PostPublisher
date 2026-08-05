@@ -55,7 +55,7 @@ async function main() {
     let hashtags = post.hashtags;
     let imagePrompt = post.image_prompt;
     let engagementText = post.engagement_text;
-    let headlineText = post.angle || 'AI & Sport';
+    let headlineText = post.headline_text || post.angle || 'AI & Sport';
 
     // ── Text revision (mode=text or mode=both) ────────────────────────────────
     if (mode === 'text' || mode === 'both') {
@@ -82,6 +82,7 @@ async function main() {
         hashtags,
         imagePrompt,
         engagementText,
+        headlineText,
         reviewStatus: 'pending',
         regenerationNotes: notes || null,
       });
@@ -110,6 +111,7 @@ async function main() {
 
       db.update(postId, {
         imagePath: newImagePath,
+        headlineText,
         reviewStatus: 'pending',
         regenerationNotes: notes || null,
       });
@@ -138,6 +140,7 @@ async function main() {
     imagePath: null,
     imagePrompt: content.imagePrompt,
     engagementText: content.imageEngagementText,
+    headlineText: content.headlineText,
     scheduledFor: content.scheduledFor,
   });
   console.log(`[generate] Created pending post id=${postId}`);

@@ -124,6 +124,13 @@ function measureAndWrap(ctx, text, maxWidth) {
   return lines;
 }
 
+// node-canvas has no bundled emoji font — emoji glyphs render as broken tofu
+// boxes, so strip them from anything drawn on the canvas (fine in the LinkedIn
+// post body, which renders via the browser/app's own emoji font instead).
+function stripEmoji(text) {
+  return String(text || '').replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️]/gu, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 function drawTextWithShadow(ctx, text, x, y, shadowColor = 'rgba(0,0,0,0.85)', blur = 14) {
   ctx.shadowColor = shadowColor;
   ctx.shadowBlur = blur;
@@ -215,13 +222,13 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   } catch { /* branding is non-critical — skip on failure */ }
 
   // ── 6. Main headline (centered, large, with high-contrast backdrop) ──────────
-  const headSize = headline.length > 45 ? 60 : headline.length > 30 ? 70 : 78;
+  const headSize = headline.length > 45 ? 60 : headline.length > 32 ? 68 : headline.length > 20 ? 78 : 88;
   ctx.font = `bold ${headSize}px sans-serif`;
   ctx.fillStyle = BRAND.white;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
 
-  const headLines = measureAndWrap(ctx, headline.toUpperCase(), size - 120);
+  const headLines = measureAndWrap(ctx, stripEmoji(headline).toUpperCase(), size - 120);
   const headLineH = headSize * 1.2;
   const headTotalH = headLines.length * headLineH;
   const headStartY = size / 2 - headTotalH / 2 - 60;
@@ -267,7 +274,7 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     ctx.fillStyle = BRAND.accent;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    drawTextWithShadow(ctx, engagementText, size / 2, underlineY + 56, 'rgba(0,0,0,0.8)', 10);
+    drawTextWithShadow(ctx, stripEmoji(engagementText), size / 2, underlineY + 56, 'rgba(0,0,0,0.8)', 10);
   }
 
   // ── 9. Save ──────────────────────────────────────────────────────────────
