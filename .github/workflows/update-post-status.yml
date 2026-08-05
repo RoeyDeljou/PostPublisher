@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       post_id:
-        description: "Post ID to update"
+        description: "Post ID to update — comma-separated for multiple (e.g. 12,13,14)"
         required: true
-        type: number
+        type: string
       status:
         description: "New status (leave blank to not change)"
         required: false
@@ -58,9 +58,11 @@ jobs:
               console.error("No fields provided (status / review_status / scheduled_for) — nothing to update.");
               process.exit(1);
             }
+            const ids = String(process.env.POST_ID).split(",").map(s => Number(s.trim())).filter(Number.isInteger);
+            if (!ids.length) { console.error("No valid post IDs provided."); process.exit(1); }
             const { ops } = require("./src/db.js");
-            const result = ops.update(Number(process.env.POST_ID), fields);
-            console.log(JSON.stringify({ postId: Number(process.env.POST_ID), fields, result }, null, 2));
+            const results = ids.map(id => ({ postId: id, result: ops.update(id, fields) }));
+            console.log(JSON.stringify({ fields, results }, null, 2));
           '
 
       - name: Commit updated DB
@@ -68,5 +70,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/posts.db
-          git diff --staged --quiet || git commit -m "chore: update post ${{ inputs.post_id }}"
+          git diff --staged --quiet || git commit -m "chore: update post(s) ${{ inputs.post_id }}"
           git push

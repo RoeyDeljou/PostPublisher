@@ -50,6 +50,38 @@ async function main() {
     console.log(`[generate] Regenerating post id=${postId} (mode=${mode})`);
     if (notes) console.log(`[generate] Notes: ${notes}`);
 
+    // ── "Both" = full fresh regenerate: brand new topic, text, and image —
+    // NOT a revision of the existing post. Same post id, entirely new content.
+    if (mode === 'both') {
+      const recentPosts = db.recent(7);
+      const recentBodies = recentPosts.map(p => p.body);
+      const content = await generateContent(recentBodies, notes);
+
+      const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
+      const newImagePath = await buildImage({
+        prompt: content.imagePrompt,
+        headline: content.headlineText,
+        engagementText: content.imageEngagementText,
+        outputPath,
+        notes,
+      });
+
+      db.update(postId, {
+        angle: content.angle,
+        body: content.body,
+        hashtags: JSON.stringify(content.hashtags || []),
+        imagePrompt: content.imagePrompt,
+        engagementText: content.imageEngagementText,
+        headlineText: content.headlineText,
+        imagePath: newImagePath,
+        reviewStatus: 'pending',
+        regenerationNotes: notes || null,
+      });
+      console.log(`[generate] ✅ Brand new topic + text + image for post ${postId}: ${content.angle}`);
+      console.log(JSON.stringify({ postId, mode }));
+      return;
+    }
+
     let angle = post.angle;
     let body = post.body;
     let hashtags = post.hashtags;
@@ -57,8 +89,8 @@ async function main() {
     let engagementText = post.engagement_text;
     let headlineText = post.headline_text || post.angle || 'AI & Sport';
 
-    // ── Text revision (mode=text or mode=both) ────────────────────────────────
-    if (mode === 'text' || mode === 'both') {
+    // ── Text revision (mode=text) — improves wording, keeps the same topic ────
+    if (mode === 'text') {
       let parsedHashtags = [];
       try { parsedHashtags = JSON.parse(post.hashtags || '[]'); } catch { /* leave empty */ }
 
@@ -89,16 +121,14 @@ async function main() {
       console.log(`[generate] ✅ Text revised for post ${postId}`);
     }
 
-    // ── Image rebuild (mode=image or mode=both) ───────────────────────────────
-    if (mode === 'image' || mode === 'both') {
+    // ── Image rebuild (mode=image) — same topic, new render ───────────────────
+    if (mode === 'image') {
       const template = getActiveTemplate();
-      const finalImagePrompt = mode === 'both'
-        ? [imagePrompt, template ? `Style reference: ${template.styleNotes}` : null].filter(Boolean).join('. ')
-        : [
-            post.image_prompt,
-            notes ? `Additional guidance: ${notes}` : null,
-            template ? `Style reference: ${template.styleNotes}` : null,
-          ].filter(Boolean).join('. ');
+      const finalImagePrompt = [
+        post.image_prompt,
+        notes ? `Additional guidance: ${notes}` : null,
+        template ? `Style reference: ${template.styleNotes}` : null,
+      ].filter(Boolean).join('. ');
 
       const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
       const newImagePath = await buildImage({
@@ -126,8 +156,7 @@ async function main() {
   console.log('[generate] Generating new post content via Claude Haiku...');
   const recentPosts = db.recent(7);
   const recentBodies = recentPosts.map(p => p.body);
-  const recentImagePrompts = recentPosts.map(p => p.image_prompt).filter(Boolean);
-  const content = await generateContent(recentBodies, notes, recentImagePrompts);
+  const content = await generateContent(recentBodies, notes);
 
   console.log(`[generate] Angle: ${content.angle}`);
   console.log(`[generate] Headline: ${content.headlineText}`);

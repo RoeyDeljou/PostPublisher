@@ -3,6 +3,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { getActiveTemplate } = require('./templates');
+const { nextSport } = require('./rotation');
 
 const TOPIC_POOL = [
   'AI injury prediction and athlete load management',
@@ -63,7 +64,7 @@ POST STRUCTURE:
 5. 4-6 hashtags on final line
 
 IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same look every time:
-- SPORT ROTATION: pick ONE specific sport for this image from: ${SPORT_POOL.join(', ')}. Check the recent posts/images list below and do NOT reuse the same sport as any of them — rotate to something different each time. The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport you choose; don't default to soccer.
+- SPORT FOR THIS IMAGE: the user message specifies an exact sport below — build the imagePrompt around THAT sport only, don't substitute a different one (it's assigned by a fixed rotation outside your control, precisely so sports don't repeat). The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport is specified; don't default to soccer.
 - Vary the composition type based on what genuinely fits THIS topic and sport — don't default to "glowing neural network" for everything, and don't default to people training every time either. Good options: real athletes/players training or competing in the chosen sport, stadium/arena/court/track scenes, sport-specific equipment close-ups (a basketball mid-shot through the net, tennis racquet strings, cleats and turf, a cycling helmet), wearable tech on an athlete, data visualizations and dashboards, abstract geometric sport shapes, particle fields. Pick whichever genuinely suits the angle and sport.
 - Humans are NOT required. When the topic or sport is better served without people, use something concrete and relevant instead (equipment, venue, gear, a scoreboard, a court/pitch/track from a striking angle) — avoid generic abstract data-viz as the default fallback; make even the no-people option feel specific to the chosen sport and topic. When you DO include people, describe them concretely and photorealistically (e.g. "a point guard mid-jump-shot in an arena, motion blur on the arm, floodlights overhead") so the renderer has a clear, natural scene to work with rather than an ambiguous one.
 - Style: cinematic, high-tech, photorealistic where possible — vary the color palette to suit the chosen sport/venue rather than always dark navy (e.g. warm clay-court tones for tennis, bright arena lighting for basketball, outdoor daylight for cycling/track).
@@ -121,15 +122,12 @@ async function callClaudeForJson(client, systemPrompt, userMessage, retries = 2)
   throw lastErr;
 }
 
-async function generateContent(recentBodies = [], regenerationNotes = null, recentImagePrompts = []) {
+async function generateContent(recentBodies = [], regenerationNotes = null) {
   const client = new Anthropic();
+  const sport = nextSport(SPORT_POOL);
 
   const avoidTopics = recentBodies.length > 0
     ? `\n\nRECENT POSTS TO AVOID REPEATING:\n${recentBodies.slice(0, 7).map((b, i) => `${i + 1}. ${b.substring(0, 120)}...`).join('\n')}`
-    : '';
-
-  const avoidSports = recentImagePrompts.length > 0
-    ? `\n\nRECENT IMAGE PROMPTS (avoid reusing the same sport or composition as these):\n${recentImagePrompts.slice(0, 7).map((p, i) => `${i + 1}. ${p}`).join('\n')}`
     : '';
 
   const tomorrow = new Date();
@@ -149,7 +147,9 @@ async function generateContent(recentBodies = [], regenerationNotes = null, rece
 Scheduled for: ${scheduledFor}
 
 Available topic pool (pick one not used recently):
-${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}${avoidSports}${notesSection}${styleSection}
+${TOPIC_POOL.map((t, i) => `${i + 1}. ${t}`).join('\n')}${avoidTopics}
+
+SPORT FOR THIS IMAGE: ${sport} — use this exact sport in imagePrompt, see IMAGE PROMPT RULES.${notesSection}${styleSection}
 
 Generate the LinkedIn post. Return only JSON.`;
 

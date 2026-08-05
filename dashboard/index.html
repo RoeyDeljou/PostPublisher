@@ -243,9 +243,13 @@
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
         <option value="failed">Failed</option>
-        <option value="deleted">Deleted</option>
       </select>
       <span id="gallery-count" style="color:var(--muted);font-size:.85rem"></span>
+      <span id="gallery-bulk-bar" style="display:none;align-items:center;gap:.6rem;margin-left:auto">
+        <span id="gallery-selected-count" style="font-size:.85rem;color:var(--muted)"></span>
+        <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelected()">🗑 Delete Selected</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearGallerySelection()">Clear</button>
+      </span>
     </div>
     <div class="gallery-grid" id="gallery-grid"></div>
   </div>
@@ -326,6 +330,7 @@ let DB_LOADED = false;
 let templatesData = [];
 let pauseState = { paused: false };
 let settingsState = { allowPersonalPosting: false };
+let gallerySelection = new Set();
 
 // ── Settings ───────────────────────────────────────────────────────────────
 function getCfg() {
@@ -492,7 +497,7 @@ function renderPendingPanel(){
             <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
               <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'image', 'regen-notes')">🖼 Image Only</button>
               <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'text', 'regen-notes')">✏️ Text Only</button>
-              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', 'regen-notes')">✨ Both</button>
+              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', 'regen-notes')">✨ Both (new topic)</button>
             </div>
           </div>
           <div class="card">
@@ -746,8 +751,9 @@ async function reschedulePost(postId) {
 async function regeneratePost(postId, mode, notesElId) {
   const notesEl = document.getElementById(notesElId);
   const notes = notesEl ? notesEl.value.trim() : '';
-  const modeLabel = mode === 'image' ? 'image' : mode === 'text' ? 'text' : 'text and image';
-  if (!confirm(`Regenerate ${modeLabel} for post ${postId}?\n${notes ? 'Notes: ' + notes : 'No notes — will use original content.'}`)) return;
+  const modeLabel = mode === 'image' ? 'image (same topic)' : mode === 'text' ? 'text (same topic, better wording)' : 'EVERYTHING — brand new topic, text, and image';
+  const notesLine = notes ? 'Notes: ' + notes : (mode === 'both' ? 'No notes — a fresh random topic will be picked.' : 'No notes — will use original content.');
+  if (!confirm(`Regenerate ${modeLabel} for post ${postId}?\n${notesLine}`)) return;
   const toastMsg = mode === 'image' ? '🖼 Regenerating image — refresh in ~2 min'
                  : mode === 'text' ? '✏️ Regenerating text — refresh in ~1 min'
                  : '✨ Regenerating text + image — this runs two API calls back to back, give it ~3-4 min';
@@ -770,6 +776,31 @@ async function deletePostTable(postId) {
   toast('Deleting…');
   const r = await triggerWorkflow('update-post-status.yml', { post_id: String(postId), status: 'deleted' });
   toast(r.ok ? '🗑 Deletion queued — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
+}
+
+// ── Gallery multi-select bulk delete ─────────────────────────────────────────
+function toggleGallerySelect(postId, checked) {
+  if (checked) gallerySelection.add(postId); else gallerySelection.delete(postId);
+  renderGallerySelectionBar();
+}
+function clearGallerySelection() {
+  gallerySelection.clear();
+  renderGallery();
+}
+function renderGallerySelectionBar() {
+  const bar = document.getElementById('gallery-bulk-bar');
+  const count = gallerySelection.size;
+  bar.style.display = count > 0 ? 'flex' : 'none';
+  document.getElementById('gallery-selected-count').textContent = `${count} selected`;
+}
+async function bulkDeleteSelected() {
+  const ids = [...gallerySelection];
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} selected post${ids.length !== 1 ? 's' : ''}? This runs as a single batch.`)) return;
+  toast(`Deleting ${ids.length} posts…`);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: ids.join(','), status: 'deleted' });
+  if (r.ok) gallerySelection.clear();
+  toast(r.ok ? `🗑 ${ids.length} posts queued for deletion — refresh in ~1 min` : `❌ Failed: ${r.detail}`, 6000);
 }
 
 // ── POST DETAIL MODAL (full image + full text + regenerate-if-not-posted) ───
@@ -814,7 +845,7 @@ function openPostModal(postId) {
       <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
         <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'image', '${notesId}')">🖼 Image Only</button>
         <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'text', '${notesId}')">✏️ Text Only</button>
-        <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', '${notesId}')">✨ Both</button>
+        <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', '${notesId}')">✨ Both (new topic)</button>
       </div>
     </div>` : `<p style="font-size:.8rem;color:var(--muted)">Configure GitHub settings to regenerate from here.</p>`)}
   `;
@@ -870,7 +901,7 @@ function renderGalleryDraft() {
             <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap">
               <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'image', 'draft-regen-notes')">🖼 Image Only</button>
               <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'text', 'draft-regen-notes')">✏️ Text Only</button>
-              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', 'draft-regen-notes')">✨ Both</button>
+              <button class="btn btn-warn btn-sm" onclick="regeneratePost(${post.id}, 'both', 'draft-regen-notes')">✨ Both (new topic)</button>
             </div>
           </div>` : `<p style="font-size:.78rem;color:var(--muted);margin-top:.5rem">Configure GitHub settings to regenerate from here.</p>`}
         </div>
@@ -885,9 +916,14 @@ function renderGallery() {
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
     if (r.status === 'posted') return false; // posted posts live in the Posted tab instead
+    if (r.status === 'deleted') return false; // deleted posts are hidden entirely
     if (filter && r.status !== filter) return false;
     return !!r.image_path;
   });
+  // Drop selections for posts no longer visible (e.g. just got deleted/posted elsewhere)
+  const visibleIds = new Set(rows.map(r => r.id));
+  for (const id of gallerySelection) if (!visibleIds.has(id)) gallerySelection.delete(id);
+
   document.getElementById('gallery-count').textContent = `${rows.length} image${rows.length !== 1 ? 's' : ''}`;
   document.getElementById('gallery-grid').innerHTML = rows.map(r => {
     const src = imageUrl(r.image_path);
@@ -896,7 +932,11 @@ function renderGallery() {
     const urnHref = linkedinUrl(r.post_urn);
     const canDelete = canAct && (r.status === 'pending' || r.status === 'failed');
     const canMarkPosted = canAct && r.status !== 'posted' && r.status !== 'deleted';
-    return `<div class="gallery-card" style="cursor:pointer" onclick="openPostModal(${r.id})">
+    const checked = gallerySelection.has(r.id);
+    return `<div class="gallery-card" style="cursor:pointer;position:relative" onclick="openPostModal(${r.id})">
+      ${canDelete ? `<label style="position:absolute;top:.5rem;left:.5rem;z-index:2;background:rgba(5,15,35,.55);border-radius:6px;padding:.25rem;display:flex" onclick="event.stopPropagation()">
+        <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleGallerySelect(${r.id}, this.checked)" style="width:18px;height:18px;cursor:pointer" />
+      </label>` : ''}
       <div class="gc-img">
         ${src ? `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
       </div>
@@ -916,6 +956,7 @@ function renderGallery() {
       </div>
     </div>`;
   }).join('') || '<p style="color:var(--muted);padding:2rem">No images found.</p>';
+  renderGallerySelectionBar();
 }
 
 // ── POSTED TABLE (read-only — posted posts only) ─────────────────────────────
