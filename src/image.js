@@ -44,19 +44,51 @@ function fetchUrl(url, dest) {
   });
 }
 
-async function fetchPollinationsBackground(prompt, outputPath, retries = 2) {
-  const seed = Math.floor(Math.random() * 999999);
-  const encoded = encodeURIComponent(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encoded}?width=1080&height=1080&model=flux&nologo=true&enhance=true&seed=${seed}`;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      await fetchUrl(url, outputPath);
-      return outputPath;
-    } catch (err) {
-      if (attempt === retries) throw err;
-      await new Promise(r => setTimeout(r, 16000));
-    }
-  }
+function fetchOpenAIBackground(prompt, outputPath) {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return reject(new Error('OPENAI_API_KEY not set'));
+
+    const payload = JSON.stringify({
+      model: 'gpt-image-2',
+      prompt,
+      quality: 'low',
+      size: '1024x1024',
+    });
+
+    const req = https.request({
+      hostname: 'api.openai.com',
+      path: '/v1/images/generations',
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      timeout: 60000,
+    }, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`OpenAI image API HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
+        }
+        try {
+          const parsed = JSON.parse(data);
+          const b64 = parsed.data && parsed.data[0] && parsed.data[0].b64_json;
+          if (!b64) return reject(new Error('OpenAI response missing image data'));
+          fs.writeFileSync(outputPath, Buffer.from(b64, 'base64'));
+          resolve(outputPath);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('OpenAI image request timed out')));
+    req.write(payload);
+    req.end();
+  });
 }
 
 function createGradientFallback(canvas, ctx) {
@@ -109,25 +141,27 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
 
-  // ── 1. Background ──────────────────────────────────────────────────────────
-  const bgTemp = path.join(IMAGES_DIR, `_bg_${Date.now()}.jpg`);
+  // ── 1. Background (OpenAI gpt-image-2) ────────────────────────────────────
+  const bgTemp = path.join(IMAGES_DIR, `_bg_${Date.now()}.png`);
   let bgLoaded = false;
 
-  // Default to avoiding humans (free-tier image models are prone to deformed
-  // hands/faces/bodies) — but an explicit request for people in the notes
-  // overrides that default rather than being silently blocked.
+  // Steer toward photorealistic action shots when the prompt calls for people,
+  // abstract data-viz otherwise. Always avoid real team/sponsor branding —
+  // gpt-image-2 is good enough at photorealism that it will render real logos
+  // if not told not to, which is a trademark risk for a business page.
   const peopleWords = /\b(people|person|player|players|human|humans|athlete|athletes|man|woman|men|women|coach|sprinter|striker|goalkeeper)\b/i;
   const wantsPeople = peopleWords.test(notes || '') || peopleWords.test(prompt || '');
   const safePrompt = wantsPeople
-    ? `${prompt}, photorealistic, natural body proportions, professional sports photography, dynamic action`
-    : `${prompt}, no people, no human figures, no faces, no bodies, abstract, highly detailed`;
+    ? `${prompt}, photorealistic, natural body proportions, professional sports photography, dynamic action, generic unbranded athletic wear, no real team logos, no sponsor branding, no readable text`
+    : `${prompt}, no people, no human figures, no faces, no bodies, abstract, highly detailed, no text, no logos`;
 
   try {
-    await fetchPollinationsBackground(safePrompt, bgTemp);
+    await fetchOpenAIBackground(safePrompt, bgTemp);
     const bg = await loadImage(bgTemp);
     ctx.drawImage(bg, 0, 0, size, size);
     bgLoaded = true;
-  } catch {
+  } catch (err) {
+    console.warn(`[image] Background generation failed, using gradient fallback: ${err.message}`);
     createGradientFallback(canvas, ctx);
   } finally {
     try { if (fs.existsSync(bgTemp)) fs.unlinkSync(bgTemp); } catch {}

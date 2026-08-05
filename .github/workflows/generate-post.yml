@@ -31,6 +31,7 @@ jobs:
         run: node src/generate.js ${{ inputs.notes && format('--notes "{0}"', inputs.notes) || '' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NODE_ENV: production
 
       - name: Commit pending post + image

@@ -52,6 +52,7 @@ IMAGE PROMPT RULES — the prompt is for a background image, and it should be vi
 - Include 2-3 technical quality terms that consistently improve output fidelity: cinematic lighting, volumetric light, 8k detail, sharp focus, professional render, natural body proportions (when depicting people)
 - Keep a single clear focal point — a cluttered composition with too many competing elements renders worse than one strong idea
 - Never ask for text, logos, or watermarks in the image itself — headline text and branding are added separately afterward, and AI-rendered text usually comes out garbled
+- Never name a real club, league, sponsor, or brand (e.g. don't write "Liverpool's training ground" or "wearing a Nike kit") — the image renderer is photorealistic enough to actually reproduce real logos/trademarks, which is a legal risk for a business page. Describe scenes generically instead ("a professional soccer club's training ground", "a generic dark athletic kit")
 
 HEADLINE TEXT — this is overlaid boldly on the image itself (max 60 chars), so it should read like the punchiest possible summary of the hook: short, bold, high-contrast phrasing — think chart-topping headline, not a full sentence.
 
