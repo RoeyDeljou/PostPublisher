@@ -1,0 +1,41 @@
+name: Deploy Pages
+
+# Replaces GitHub's automatic "pages build and deployment" (branch-deploy)
+# system, which has unreliable deployment-locking under a high rate of
+# rapid successive pushes — it can leave a deployment stuck "in progress"
+# and block all later ones until manually cancelled via the API. This
+# workflow uses Actions' own concurrency control instead, which cleanly
+# cancels a superseded in-flight deployment rather than orphaning it.
+#
+# Requires Settings → Pages → Build and deployment → Source = "GitHub Actions"
+# (one-time change — while Source is still "Deploy from a branch", GitHub's
+# automatic system keeps running instead of this workflow).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - id: deployment
+        uses: actions/deploy-pages@v4
