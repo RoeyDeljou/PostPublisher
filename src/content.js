@@ -67,7 +67,7 @@ POST STRUCTURE:
 4. CTA closing line — specific and action-oriented, tied to the post's actual content (e.g. "Which of these three signals is your team already tracking?" not a generic "What do you think?")
 5. 4-6 hashtags on final line
 
-DATA INTEGRITY — you have a web_search tool. Use it at least once per post to find one real, specific, recent statistic, study finding, or case study relevant to this post's topic and sport. NEVER invent a specific number, percentage, or named case study — every specific figure in the post must come from an actual search result. If search doesn't turn up a solid, relevant figure, fall back to qualitative language ("a growing number of clubs", "a noticeable drop in soft-tissue injuries") instead of a fabricated precise number. When citing the stat, name the actual source in natural prose (the league, publication, study, or organization — e.g. "the NFL's own 2024 injury data showed...") rather than pasting a raw URL, which reads as spammy on LinkedIn. Prefer authoritative sources (leagues, official team statements, peer-reviewed research, established sports-science or industry publications) over random blogs when multiple results are available. After searching, your final message must be ONLY the JSON object — no preamble, no commentary about your search, no markdown fences.
+DATA INTEGRITY — you have a web_search tool. Use it at least once per post to find one real, specific, recent statistic, study finding, or case study relevant to this post's topic and sport. NEVER invent a specific number, percentage, or named case study — every specific figure in the post must come from an actual search result. If search doesn't turn up a solid, relevant figure, fall back to qualitative language ("a growing number of clubs", "a noticeable drop in soft-tissue injuries") instead of a fabricated precise number. When citing the stat, name the actual source in natural prose (the league, publication, study, or organization — e.g. "the NFL's own 2024 injury data showed...") rather than pasting a raw URL, which reads as spammy on LinkedIn. Prefer authoritative sources (leagues, official team statements, peer-reviewed research, established sports-science or industry publications) over random blogs when multiple results are available. After searching, your final message must be ONLY the JSON object — no preamble, no commentary about your search, no markdown fences. NEVER write literal <cite> tags or citation markup (e.g. <cite index="7-9">) inside any field — name the source in plain prose instead, the way a person would write it.
 
 IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same look every time:
 - SPORT FOR THIS IMAGE: the user message specifies an exact sport below — build the imagePrompt around THAT sport only, don't substitute a different one (it's assigned by a fixed rotation outside your control, precisely so sports don't repeat). The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport is specified; don't default to soccer.
@@ -93,12 +93,34 @@ JSON schema (return EXACTLY this shape):
   "scheduledFor": "<ISO8601 tomorrow at 08:00 UTC>"
 }`;
 
+// The web_search tool sometimes leaks its citation markup into the model's own
+// generated prose as literal <cite index="N-M">...</cite> tags — strip them,
+// keeping the wrapped text, on every string field (not just body) since it can
+// show up in the angle or headline too.
+function stripCiteTags(text) {
+  return String(text || '')
+    .replace(/<cite[^>]*>(.*?)<\/cite>/gis, '$1')
+    .replace(/<\/?cite[^>]*>/gi, '')
+    .trim();
+}
+
 function sanitizeBody(body) {
-  return body
+  return stripCiteTags(body)
     .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')  // remove bold/italic
     .replace(/^#{1,6}\s+/gm, '')               // remove headers
     .replace(/^---+$/gm, '')                   // remove dividers
     .trim();
+}
+
+// Cite-tag leakage isn't limited to the body — strip it from every string field.
+function sanitizePayload(payload) {
+  if (payload.body) payload.body = sanitizeBody(payload.body);
+  if (payload.angle) payload.angle = stripCiteTags(payload.angle);
+  if (payload.headlineText) payload.headlineText = stripCiteTags(payload.headlineText);
+  if (payload.imageEngagementText) payload.imageEngagementText = stripCiteTags(payload.imageEngagementText);
+  if (payload.imagePrompt) payload.imagePrompt = stripCiteTags(payload.imagePrompt);
+  if (Array.isArray(payload.hashtags)) payload.hashtags = payload.hashtags.map(stripCiteTags);
+  return payload;
 }
 
 // With the web_search tool enabled, the response contains extra content blocks
@@ -179,8 +201,7 @@ SPORT FOR THIS IMAGE: ${sport} — use this exact sport in imagePrompt, see IMAG
 
 Search the web for one real, specific, recent stat or case study relevant to this field and sport, then generate the LinkedIn post. Return only JSON.`;
 
-  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL });
-  payload.body = sanitizeBody(payload.body);
+  const payload = sanitizePayload(await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL }));
 
   if (!payload.scheduledFor) payload.scheduledFor = scheduledFor;
   if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
@@ -221,8 +242,7 @@ If the current body already contains a specific stat, keep it only if it's genui
 
 Revise this post. Return only JSON with the same schema as before (angle, body, hashtags, imagePrompt, imageEngagementText, headlineText) — omit scheduledFor, the caller keeps the original.`;
 
-  const payload = await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL });
-  payload.body = sanitizeBody(payload.body);
+  const payload = sanitizePayload(await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL }));
 
   if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
   if (!payload.angle) payload.angle = existingPost.angle;
@@ -240,4 +260,4 @@ if (require.main === module) {
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }
 
-module.exports = { generateContent, reviseContent };
+module.exports = { generateContent, reviseContent, callClaudeForJson, stripCiteTags, WEB_SEARCH_TOOL };

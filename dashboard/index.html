@@ -216,6 +216,7 @@
   <button onclick="showTab('gallery',this)">🖼 Gallery</button>
   <button onclick="showTab('all',this)">✅ Posted</button>
   <button onclick="showTab('templates',this)">🎨 Templates</button>
+  <button onclick="showTab('responder',this)">🗨 Post Responder</button>
 </nav>
 
 <main>
@@ -291,6 +292,36 @@
       </div>
     </div>
     <div class="gallery-grid" id="templates-grid"></div>
+  </div>
+
+  <!-- ── TAB: POST RESPONDER ────────────────────────────────────────── -->
+  <div class="panel" id="panel-responder">
+    <div class="github-config-note" id="responder-config-note" style="display:none">
+      ⚙️ Set your GitHub token in <strong>Settings</strong> to generate responses.
+    </div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">
+      Paste a LinkedIn post from someone else and generate a response on ML-Innovation's behalf.
+      <strong>Reply</strong> is a short comment for posting directly under theirs. <strong>Repost Commentary</strong> is a
+      longer, full-post-style reaction meant to accompany resharing their post on our own page.
+    </p>
+    <div class="card" style="margin-bottom:1.25rem">
+      <div class="card-label">Original post text</div>
+      <textarea class="post-body" id="responder-source" placeholder="Paste the LinkedIn post you want to respond to…" style="min-height:160px"></textarea>
+      <div class="card-label" style="margin-top:.85rem">Notes (optional)</div>
+      <textarea class="notes" id="responder-notes" placeholder="Any extra guidance — tone, angle, something specific to mention…"></textarea>
+      <div class="action-row" style="margin-top:.75rem">
+        <button class="btn btn-primary" id="responder-reply-btn" onclick="generateResponse('reply')">💬 Generate Reply</button>
+        <button class="btn btn-primary" id="responder-repost-btn" onclick="generateResponse('repost')">📝 Generate Repost Commentary</button>
+      </div>
+    </div>
+    <div class="card" id="responder-result-card" style="display:none">
+      <div class="card-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span id="responder-result-label">Generated response</span>
+        <button class="btn btn-ghost btn-sm" onclick="copyResponderResult()">📋 Copy</button>
+      </div>
+      <div style="white-space:pre-wrap;font-size:.9rem;line-height:1.55" id="responder-result-text"></div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:.6rem" id="responder-result-meta"></div>
+    </div>
   </div>
 </main>
 
@@ -374,6 +405,7 @@ function showTab(name, btn){
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
   btn.classList.add('active');
+  if (name === 'responder') loadLastResponse();
 }
 
 // ── Data URL helper ──────────────────────────────────────────────────────────
@@ -468,13 +500,13 @@ function renderPendingPanel(){
   const scheduledFor = post.scheduled_for ? new Date(post.scheduled_for).toLocaleString() : 'Not scheduled';
   const scheduledDateValue = post.scheduled_for ? String(post.scheduled_for).split('T')[0] : '';
   const hashtags = tryParseJson(post.hashtags, []);
-  const imgSrc = post.image_path ? imageUrl(post.image_path) : null;
+  const { src: imgSrc, isVideo } = mediaInfo(post);
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
 
   container.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
       <div>
-        <h2 style="font-size:1.15rem;font-weight:700">Tomorrow's Post <span class="status-pill ${reviewPillClass(reviewStatus)}">${reviewStatus}</span></h2>
+        <h2 style="font-size:1.15rem;font-weight:700">Tomorrow's Post <span class="status-pill ${reviewPillClass(reviewStatus)}">${reviewStatus}</span>${isVideo ? ' <span class="status-pill" style="background:#ede9fe;color:#5b21b6">🎬 video</span>' : ''}</h2>
         <div class="schedule-info">Scheduled: ${scheduledFor} · Post ID: ${post.id}</div>
       </div>
     </div>
@@ -482,7 +514,9 @@ function renderPendingPanel(){
       <div>
         <div class="preview-image-wrap" id="preview-img-wrap">
           ${imgSrc
-            ? `<img src="${esc(imgSrc)}" alt="Post image" id="preview-img" />`
+            ? (isVideo
+                ? `<video src="${esc(imgSrc)}" id="preview-img" controls muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>`
+                : `<img src="${esc(imgSrc)}" alt="Post image" id="preview-img" />`)
             : `<div class="img-placeholder">Image generating…<br>Refresh after the workflow completes.</div>`}
         </div>
         <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
@@ -560,12 +594,23 @@ function reviewPillClass(s){
 
 function imageUrl(filePath) {
   if (!filePath) return null;
-  // Convert absolute Windows path to a relative URL from dashboard/
+  // Convert absolute Windows path to a relative URL from dashboard/ — works for
+  // both data/images/ and data/videos/ (video posts store video_path instead).
   const norm = filePath.replace(/\\/g, '/');
-  const idx = norm.lastIndexOf('/data/images/');
-  if (idx !== -1) return '..' + norm.slice(idx);
+  const imgIdx = norm.lastIndexOf('/data/images/');
+  if (imgIdx !== -1) return '..' + norm.slice(imgIdx);
+  const vidIdx = norm.lastIndexOf('/data/videos/');
+  if (vidIdx !== -1) return '..' + norm.slice(vidIdx);
   const fname = norm.split('/').pop();
   return `../data/images/${fname}`;
+}
+
+// Returns the post's media URL (video takes priority) and whether it's a video,
+// so callers can render <video> vs <img> and use the right download extension.
+function mediaInfo(post) {
+  if (post && post.video_path) return { src: imageUrl(post.video_path), isVideo: true };
+  if (post && post.image_path) return { src: imageUrl(post.image_path), isVideo: false };
+  return { src: null, isVideo: false };
 }
 
 function linkedinUrl(postUrn) {
@@ -672,18 +717,18 @@ function copyPostText(postId) {
 
 function downloadPostImage(postId) {
   const post = allRows.find(r => r.id === postId);
-  const imageHref = post && post.image_path ? imageUrl(post.image_path) : null;
-  if (!imageHref) {
+  const { src: href, isVideo } = post ? mediaInfo(post) : { src: null };
+  if (!href) {
     toast('No image available', 3000);
     return;
   }
   const a = document.createElement('a');
-  a.href = imageHref;
-  a.download = `post-${postId}.png`;
+  a.href = href;
+  a.download = `post-${postId}.${isVideo ? 'mp4' : 'png'}`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  toast('⬇️ Download started');
+  toast(`⬇️ Download started`);
 }
 
 async function markAsPosted(postId) {
@@ -809,22 +854,23 @@ function openPostModal(postId) {
   if (!post) return;
   const cfg = getCfg();
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
-  const isLocked = post.status === 'posted' || post.status === 'deleted';
-  const imgSrc = post.image_path ? imageUrl(post.image_path) : null;
+  const wasPosted = !!post.posted_at;
+  const isLocked = wasPosted || post.status === 'deleted';
+  const { src: imgSrc, isVideo } = mediaInfo(post);
   const hashtags = tryParseJson(post.hashtags, []);
   const urnHref = linkedinUrl(post.post_urn);
   const notesId = 'modal-regen-notes';
-  const canDelete = canAct && (post.status === 'pending' || post.status === 'failed');
+  const canDelete = canAct && !wasPosted && (post.status === 'pending' || post.status === 'failed');
 
   document.getElementById('post-modal-content').innerHTML = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem">
       <div>
-        <h2 style="font-size:1.1rem;font-weight:700">${esc(post.angle || ('Post #' + post.id))} <span class="status status-${post.status}">${post.status}</span></h2>
+        <h2 style="font-size:1.1rem;font-weight:700">${esc(post.angle || ('Post #' + post.id))} <span class="status status-${post.status}">${post.status}</span>${isVideo ? ' <span class="status-pill" style="background:#ede9fe;color:#5b21b6">🎬 video</span>' : ''}</h2>
         <div class="schedule-info">Post ID: ${post.id} · ${esc((post.created_at||'').split('T')[0])}${urnHref ? ` · <a class="urn-link" href="${urnHref}" target="_blank" onclick="event.stopPropagation()">View on LinkedIn ↗</a>` : ''}</div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="closePostModal()">✕ Close</button>
     </div>
-    ${imgSrc ? `<div class="preview-image-wrap" style="border-radius:8px;margin-bottom:1rem"><img src="${esc(imgSrc)}" alt="Post image" /></div>` : ''}
+    ${imgSrc ? `<div class="preview-image-wrap" style="border-radius:8px;margin-bottom:1rem">${isVideo ? `<video src="${esc(imgSrc)}" controls muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>` : `<img src="${esc(imgSrc)}" alt="Post image" />`}</div>` : ''}
     <div class="card" style="margin-bottom:1rem">
       <div class="card-label">Post text</div>
       <div style="white-space:pre-wrap;font-size:.9rem;line-height:1.55">${esc(post.body || '—')}</div>
@@ -837,7 +883,7 @@ function openPostModal(postId) {
       ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deletePostTable(${post.id})">🗑 Delete</button>` : ''}
     </div>
     ${isLocked
-      ? `<p style="font-size:.8rem;color:var(--muted)">${post.status === 'posted' ? '🔒 This post is already live on LinkedIn — locked from further edits.' : 'This post is deleted.'}</p>`
+      ? `<p style="font-size:.8rem;color:var(--muted)">${wasPosted ? '🔒 This post is already live on LinkedIn — locked from further edits.' : 'This post is deleted.'}</p>`
       : (canAct ? `
     <div class="card">
       <div class="card-label">Regenerate</div>
@@ -866,7 +912,7 @@ function renderGalleryDraft() {
   if (!pending.length) { container.innerHTML = ''; return; }
 
   const post = pending[0];
-  const imgSrc = post.image_path ? imageUrl(post.image_path) : null;
+  const { src: imgSrc, isVideo } = mediaInfo(post);
   const scheduledLabel = post.scheduled_for
     ? new Date(post.scheduled_for).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
     : 'not yet scheduled';
@@ -876,9 +922,11 @@ function renderGalleryDraft() {
     <div class="card" style="margin-bottom:1.5rem;border:2px solid var(--accent)">
       <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
         <div style="width:200px;flex-shrink:0">
-          <div class="preview-image-wrap" style="border-radius:8px;aspect-ratio:1">
+          <div class="preview-image-wrap" style="border-radius:8px;aspect-ratio:1;cursor:pointer" onclick="openPostModal(${post.id})">
             ${imgSrc
-              ? `<img src="${esc(imgSrc)}" alt="Next day draft" style="cursor:pointer" onclick="openPostModal(${post.id})" />`
+              ? (isVideo
+                  ? `<video src="${esc(imgSrc)}" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>`
+                  : `<img src="${esc(imgSrc)}" alt="Next day draft" />`)
               : `<div class="img-placeholder" style="font-size:.75rem">Image generating…</div>`}
           </div>
         </div>
@@ -915,30 +963,35 @@ function renderGallery() {
   const cfg = getCfg();
   const canAct = !!(cfg.owner && cfg.repo && cfg.token);
   const rows = allRows.filter(r => {
-    if (r.status === 'posted') return false; // posted posts live in the Posted tab instead
+    if (r.posted_at) return false; // posted posts live in the Posted tab instead (even if later deleted)
     if (r.status === 'deleted') return false; // deleted posts are hidden entirely
     if (filter && r.status !== filter) return false;
-    return !!r.image_path;
+    return !!(r.image_path || r.video_path);
   });
   // Drop selections for posts no longer visible (e.g. just got deleted/posted elsewhere)
   const visibleIds = new Set(rows.map(r => r.id));
   for (const id of gallerySelection) if (!visibleIds.has(id)) gallerySelection.delete(id);
 
-  document.getElementById('gallery-count').textContent = `${rows.length} image${rows.length !== 1 ? 's' : ''}`;
+  document.getElementById('gallery-count').textContent = `${rows.length} item${rows.length !== 1 ? 's' : ''}`;
   document.getElementById('gallery-grid').innerHTML = rows.map(r => {
-    const src = imageUrl(r.image_path);
+    const { src, isVideo } = mediaInfo(r);
     const date = (r.posted_at || r.created_at || '').split('T')[0];
     const angle = (r.angle || '—').substring(0, 60);
     const urnHref = linkedinUrl(r.post_urn);
-    const canDelete = canAct && (r.status === 'pending' || r.status === 'failed');
-    const canMarkPosted = canAct && r.status !== 'posted' && r.status !== 'deleted';
+    const canDelete = canAct && !r.posted_at && (r.status === 'pending' || r.status === 'failed');
+    const canMarkPosted = canAct && !r.posted_at && r.status !== 'deleted';
     const checked = gallerySelection.has(r.id);
     return `<div class="gallery-card" style="cursor:pointer;position:relative" onclick="openPostModal(${r.id})">
       ${canDelete ? `<label style="position:absolute;top:.5rem;left:.5rem;z-index:2;background:rgba(5,15,35,.55);border-radius:6px;padding:.25rem;display:flex" onclick="event.stopPropagation()">
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleGallerySelect(${r.id}, this.checked)" style="width:18px;height:18px;cursor:pointer" />
       </label>` : ''}
+      ${isVideo ? `<span style="position:absolute;top:.5rem;right:.5rem;z-index:2;background:rgba(5,15,35,.7);color:#fff;border-radius:6px;padding:.2rem .5rem;font-size:.7rem">🎬 video</span>` : ''}
       <div class="gc-img">
-        ${src ? `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
+        ${src
+          ? (isVideo
+              ? `<video src="${esc(src)}" autoplay muted loop playsinline></video>`
+              : `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />`)
+          : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
       </div>
       <div class="gc-body">
         <div class="gc-date">${date}</div>
@@ -963,7 +1016,7 @@ function renderGallery() {
 function renderTable() {
   const search = document.getElementById('search').value.toLowerCase();
   const rows = allRows.filter(r => {
-    if (r.status !== 'posted') return false;
+    if (!r.posted_at) return false;
     if (search) {
       const hay = `${r.body||''} ${r.angle||''} ${r.post_urn||''}`.toLowerCase();
       if (!hay.includes(search)) return false;
@@ -1133,6 +1186,57 @@ async function togglePersonalPosting(checkboxEl) {
   toast(ok ? (wantAllow ? '✅ Personal posting allowed' : '🚫 Personal posting disabled') : '❌ Failed to save setting', 4000);
 }
 
+// ── POST RESPONDER ────────────────────────────────────────────────────────────
+let lastResponse = null;
+
+async function loadLastResponse() {
+  try {
+    const resp = await fetch(dataUrl('data/last-response.json') + '?t=' + Date.now());
+    lastResponse = resp.ok ? await resp.json() : null;
+  } catch { lastResponse = null; }
+  renderResponderPanel();
+}
+
+function renderResponderPanel() {
+  const cfg = getCfg();
+  const canAct = !!(cfg.owner && cfg.repo && cfg.token);
+  document.getElementById('responder-config-note').style.display = canAct ? 'none' : 'block';
+  document.getElementById('responder-reply-btn').disabled = !canAct;
+  document.getElementById('responder-repost-btn').disabled = !canAct;
+
+  const card = document.getElementById('responder-result-card');
+  if (!lastResponse) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('responder-result-label').textContent =
+    lastResponse.mode === 'repost' ? '📝 Repost commentary' : '💬 Reply';
+  document.getElementById('responder-result-text').textContent = lastResponse.response;
+  document.getElementById('responder-result-meta').textContent =
+    'Generated ' + new Date(lastResponse.generatedAt).toLocaleString() + ' — click a Generate button again to refresh this after the workflow finishes';
+}
+
+async function generateResponse(mode) {
+  const source = document.getElementById('responder-source').value.trim();
+  if (!source) { toast('⚠️ Paste the original post text first', 3000); return; }
+  const notes = document.getElementById('responder-notes').value.trim();
+  const modeLabel = mode === 'repost' ? 'repost commentary' : 'a reply';
+  if (!confirm(`Generate ${modeLabel} for this post?`)) return;
+  toast('Generating…');
+  const inputs = { post_text: source, mode };
+  if (notes) inputs.notes = notes;
+  const r = await triggerWorkflow('generate-response.yml', inputs);
+  toast(r.ok ? '✅ Generating — refresh in ~30s, then reopen this tab to see it' : `❌ Failed: ${r.detail}`, 7000);
+}
+
+function copyResponderResult() {
+  if (!lastResponse) return;
+  const text = lastResponse.response;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => toast('📋 Copied')).catch(() => prompt('Copy this text:', text));
+  } else {
+    prompt('Copy this text:', text);
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function tryParseJson(s, fallback){ try{return JSON.parse(s);}catch{return fallback;} }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1142,6 +1246,7 @@ loadDb();
 loadPauseState();
 loadTemplates();
 loadSettingsState();
+loadLastResponse();
 </script>
 </body>
 </html>

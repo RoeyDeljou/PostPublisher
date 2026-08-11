@@ -50,6 +50,7 @@ function openDb() {
   if (!cols.includes('approved_at')) db.exec("ALTER TABLE posts ADD COLUMN approved_at TEXT");
   if (!cols.includes('regeneration_notes')) db.exec("ALTER TABLE posts ADD COLUMN regeneration_notes TEXT");
   if (!cols.includes('headline_text')) db.exec("ALTER TABLE posts ADD COLUMN headline_text TEXT");
+  if (!cols.includes('video_path')) db.exec("ALTER TABLE posts ADD COLUMN video_path TEXT");
   return db;
 }
 
@@ -57,8 +58,8 @@ const ops = {
   insert(data) {
     const db = openDb();
     const stmt = db.prepare(`
-      INSERT INTO posts (angle, body, hashtags, image_path, image_prompt, engagement_text, headline_text, scheduled_for, status, review_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')
+      INSERT INTO posts (angle, body, hashtags, image_path, image_prompt, engagement_text, headline_text, video_path, scheduled_for, status, review_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')
     `);
     const result = stmt.run(
       data.angle || null,
@@ -68,6 +69,7 @@ const ops = {
       data.imagePrompt || null,
       data.engagementText || null,
       data.headlineText || null,
+      data.videoPath || null,
       data.scheduledFor || null,
     );
     db.close();
@@ -83,7 +85,7 @@ const ops = {
       regenerationNotes: 'regeneration_notes', body: 'body',
       engagementText: 'engagement_text', scheduledFor: 'scheduled_for',
       angle: 'angle', hashtags: 'hashtags', imagePrompt: 'image_prompt',
-      headlineText: 'headline_text',
+      headlineText: 'headline_text', videoPath: 'video_path',
     };
     const allowed = Object.values(fieldMap);
     const setClauses = [];

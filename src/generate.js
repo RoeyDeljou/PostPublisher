@@ -18,15 +18,43 @@ const path = require('path');
 const fs = require('fs');
 const { generateContent, reviseContent } = require('./content');
 const { buildImage } = require('./image');
+const { buildVideo } = require('./video');
+const { nextAssetIsVideo } = require('./rotation');
 const { ops: db } = require('./db');
 const { isPaused } = require('./pause');
 const { getActiveTemplate } = require('./templates');
 
 const IMAGES_DIR = path.join(__dirname, '..', 'data', 'images');
+const VIDEOS_DIR = path.join(__dirname, '..', 'data', 'videos');
 
 function getArg(flag) {
   const i = process.argv.indexOf(flag);
   return i !== -1 ? process.argv[i + 1] : null;
+}
+
+// Fresh-generation asset: occasionally (1-in-5, via rotation.js) a short video
+// instead of the usual static image, using the exact same rules (sport/topic
+// rotation already applied to the prompt, no fabricated headline text, etc.).
+// Falls back to the image on any video failure so this can never break a run.
+async function buildAsset({ prompt, headline, engagementText, baseName, notes }) {
+  if (nextAssetIsVideo(5)) {
+    if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
+    try {
+      console.log('[generate] Building short video instead of a static image this time...');
+      const videoPath = await buildVideo({
+        prompt, headline, engagementText, notes,
+        outputPath: path.join(VIDEOS_DIR, `${baseName}.mp4`),
+      });
+      return { imagePath: null, videoPath };
+    } catch (err) {
+      console.warn(`[generate] Video generation failed (${err.message}) — falling back to a static image`);
+    }
+  }
+  const imagePath = await buildImage({
+    prompt, headline, engagementText, notes,
+    outputPath: path.join(IMAGES_DIR, `${baseName}.png`),
+  });
+  return { imagePath, videoPath: null };
 }
 
 async function main() {
@@ -56,12 +84,11 @@ async function main() {
       const recentPosts = db.recent(7);
       const content = await generateContent(recentPosts, notes);
 
-      const outputPath = path.join(IMAGES_DIR, `post_${postId}_regen_${Date.now()}.png`);
-      const newImagePath = await buildImage({
+      const { imagePath: newImagePath, videoPath: newVideoPath } = await buildAsset({
         prompt: content.imagePrompt,
         headline: content.headlineText,
         engagementText: content.imageEngagementText,
-        outputPath,
+        baseName: `post_${postId}_regen_${Date.now()}`,
         notes,
       });
 
@@ -73,10 +100,11 @@ async function main() {
         engagementText: content.imageEngagementText,
         headlineText: content.headlineText,
         imagePath: newImagePath,
+        videoPath: newVideoPath,
         reviewStatus: 'pending',
         regenerationNotes: notes || null,
       });
-      console.log(`[generate] ✅ Brand new topic + text + image for post ${postId}: ${content.angle}`);
+      console.log(`[generate] ✅ Brand new topic + text + ${newVideoPath ? 'video' : 'image'} for post ${postId}: ${content.angle}`);
       console.log(JSON.stringify({ postId, mode }));
       return;
     }
@@ -184,24 +212,23 @@ async function main() {
     console.log(`[generate] Auto-moved previous post ${p.id} to gallery (archived)`);
   }
 
-  const outputPath = path.join(IMAGES_DIR, `post_${postId}_${Date.now()}.png`);
-  let imagePath = null;
+  let imagePath = null, videoPath = null;
   try {
-    console.log('[generate] Building image...');
-    imagePath = await buildImage({
+    console.log('[generate] Building image/video asset...');
+    ({ imagePath, videoPath } = await buildAsset({
       prompt: content.imagePrompt,
       headline: content.headlineText,
       engagementText: content.imageEngagementText,
-      outputPath,
-    });
-    console.log(`[generate] Image ready: ${imagePath}`);
-    db.update(postId, { imagePath });
+      baseName: `post_${postId}_${Date.now()}`,
+    }));
+    console.log(`[generate] Asset ready: ${videoPath || imagePath}`);
+    db.update(postId, { imagePath, videoPath });
   } catch (err) {
-    console.warn(`[generate] Image failed: ${err.message} — will post text-only`);
+    console.warn(`[generate] Asset build failed: ${err.message} — will post text-only`);
   }
 
   console.log(`[generate] ✅ Post id=${postId} ready for review — publishing is manual right now.`);
-  console.log(JSON.stringify({ postId, angle: content.angle, imagePath, scheduledFor: content.scheduledFor }));
+  console.log(JSON.stringify({ postId, angle: content.angle, imagePath, videoPath, scheduledFor: content.scheduledFor }));
 }
 
 if (require.main === module) {

@@ -52,6 +52,7 @@ jobs:
           node -e '
             const fields = {};
             if (process.env.NEW_STATUS) fields.status = process.env.NEW_STATUS;
+            if (process.env.NEW_STATUS === "posted") fields.postedAt = new Date().toISOString();
             if (process.env.NEW_REVIEW_STATUS) fields.reviewStatus = process.env.NEW_REVIEW_STATUS;
             if (process.env.NEW_SCHEDULED_FOR) fields.scheduledFor = process.env.NEW_SCHEDULED_FOR;
             if (Object.keys(fields).length === 0) {

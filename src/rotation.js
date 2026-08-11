@@ -15,9 +15,10 @@ function readState() {
     return {
       sportIndex: Number.isInteger(raw.sportIndex) ? raw.sportIndex : (Number.isInteger(raw.index) ? raw.index : 0),
       topicIndex: Number.isInteger(raw.topicIndex) ? raw.topicIndex : 0,
+      assetIndex: Number.isInteger(raw.assetIndex) ? raw.assetIndex : 0,
     };
   } catch {
-    return { sportIndex: 0, topicIndex: 0 };
+    return { sportIndex: 0, topicIndex: 0, assetIndex: 0 };
   }
 }
 
@@ -43,11 +44,21 @@ function nextTopic(topicPool) {
   return topicPool[index];
 }
 
-function resetRotation() {
-  writeState({ sportIndex: 0, topicIndex: 0 });
+// Returns true once every `everyN` calls (e.g. everyN=5 -> post 1,6,11,... use
+// video), and always advances the counter — used to make video an occasional
+// alternative to the static image rather than every single post.
+function nextAssetIsVideo(everyN = 5) {
+  const state = readState();
+  const index = state.assetIndex;
+  writeState({ ...state, assetIndex: (index + 1) % everyN });
+  return index % everyN === 0;
 }
 
-module.exports = { nextSport, nextTopic, resetRotation };
+function resetRotation() {
+  writeState({ sportIndex: 0, topicIndex: 0, assetIndex: 0 });
+}
+
+module.exports = { nextSport, nextTopic, nextAssetIsVideo, resetRotation };
 
 if (require.main === module) {
   if (process.argv[2] === 'reset') {

@@ -300,4 +300,4 @@ if (require.main === module) {
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }
 
-module.exports = { buildImage };
+module.exports = { buildImage, fetchOpenAIBackground, stripEmoji, BRAND, LOGO_PATH };

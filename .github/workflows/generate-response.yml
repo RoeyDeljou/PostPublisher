@@ -1,0 +1,64 @@
+name: Generate Post Response
+
+on:
+  workflow_dispatch:
+    inputs:
+      post_text:
+        description: "The LinkedIn post text to respond to"
+        required: true
+        type: string
+      mode:
+        description: "reply = short comment, repost = full share commentary"
+        required: true
+        type: choice
+        options: [reply, repost]
+        default: reply
+      notes:
+        description: "Optional extra guidance for the response"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-state-mutations
+  cancel-in-progress: false
+
+jobs:
+  respond:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "24", cache: "npm" }
+      - run: npm ci
+
+      - name: Generate response
+        run: |
+          node -e '
+            const { generateResponse } = require("./src/respond.js");
+            const fs = require("fs");
+            generateResponse(process.env.POST_TEXT, process.env.MODE, process.env.NOTES || null)
+              .then(result => {
+                fs.mkdirSync("data", { recursive: true });
+                fs.writeFileSync("data/last-response.json", JSON.stringify(result, null, 2));
+                console.log(JSON.stringify(result, null, 2));
+              })
+              .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
+          '
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          POST_TEXT: ${{ inputs.post_text }}
+          MODE: ${{ inputs.mode }}
+          NOTES: ${{ inputs.notes }}
+          NODE_ENV: production
+
+      - name: Commit response
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/last-response.json
+          git diff --staged --quiet || git commit -m "chore: generate post response (${{ inputs.mode }})"
+          git push
