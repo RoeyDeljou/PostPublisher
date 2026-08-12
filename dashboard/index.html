@@ -248,6 +248,7 @@
       <span id="gallery-count" style="color:var(--muted);font-size:.85rem"></span>
       <span id="gallery-bulk-bar" style="display:none;align-items:center;gap:.6rem;margin-left:auto">
         <span id="gallery-selected-count" style="font-size:.85rem;color:var(--muted)"></span>
+        <button class="btn btn-primary btn-sm" onclick="bulkMarkPostedSelected()">✅ Mark Selected Posted</button>
         <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelected()">🗑 Delete Selected</button>
         <button class="btn btn-ghost btn-sm" onclick="clearGallerySelection()">Clear</button>
       </span>
@@ -823,7 +824,7 @@ async function deletePostTable(postId) {
   toast(r.ok ? '🗑 Deletion queued — refresh in ~1 min' : `❌ Failed: ${r.detail}`, 6000);
 }
 
-// ── Gallery multi-select bulk delete ─────────────────────────────────────────
+// ── Gallery multi-select bulk actions ────────────────────────────────────────
 function toggleGallerySelect(postId, checked) {
   if (checked) gallerySelection.add(postId); else gallerySelection.delete(postId);
   renderGallerySelectionBar();
@@ -846,6 +847,15 @@ async function bulkDeleteSelected() {
   const r = await triggerWorkflow('update-post-status.yml', { post_id: ids.join(','), status: 'deleted' });
   if (r.ok) gallerySelection.clear();
   toast(r.ok ? `🗑 ${ids.length} posts queued for deletion — refresh in ~1 min` : `❌ Failed: ${r.detail}`, 6000);
+}
+async function bulkMarkPostedSelected() {
+  const ids = [...gallerySelection];
+  if (!ids.length) return;
+  if (!confirm(`Mark ${ids.length} selected post${ids.length !== 1 ? 's' : ''} as posted? This just updates the tracker — it won't publish anything. Runs as a single batch.`)) return;
+  toast(`Marking ${ids.length} posts as posted…`);
+  const r = await triggerWorkflow('update-post-status.yml', { post_id: ids.join(','), status: 'posted' });
+  if (r.ok) gallerySelection.clear();
+  toast(r.ok ? `✅ ${ids.length} posts queued as posted — refresh in ~1 min` : `❌ Failed: ${r.detail}`, 6000);
 }
 
 // ── POST DETAIL MODAL (full image + full text + regenerate-if-not-posted) ───

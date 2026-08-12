@@ -20,6 +20,14 @@ const TOPIC_POOL = [
   'Ethics of AI in sport — fairness and data privacy',
   'AI performance analysis in esports',
   'Sports nutrition optimization via machine learning',
+  'AI in sports marketing — targeted campaigns, sponsorship valuation, content personalization',
+  'AI-driven merchandise — demand forecasting, dynamic pricing, personalized product recommendations',
+  'AI in ticketing and dynamic pricing for live events',
+  'AI for back-office operations at sports organizations — scheduling, logistics, contract analysis',
+  'AI in sponsorship ROI measurement and brand exposure analytics',
+  'AI-powered sports betting and fantasy sports platforms — odds modeling and integrity monitoring',
+  'AI in sports organization HR and recruitment — front-office and non-playing staff hiring',
+  'AI for stadium and facility operations — crowd flow, concessions, energy management',
 ];
 
 // The topic angle above is sport-agnostic; the SPORT is a separate axis that should
@@ -72,6 +80,7 @@ DATA INTEGRITY — you have a web_search tool. Use it at least once per post to 
 IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same look every time:
 - SPORT FOR THIS IMAGE: the user message specifies an exact sport below — build the imagePrompt around THAT sport only, don't substitute a different one (it's assigned by a fixed rotation outside your control, precisely so sports don't repeat). The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport is specified; don't default to soccer.
 - Vary the composition type based on what genuinely fits THIS topic and sport — don't default to "glowing neural network" for everything, and don't default to people training every time either. Good options: real athletes/players training or competing in the chosen sport, stadium/arena/court/track scenes, sport-specific equipment close-ups (a basketball mid-shot through the net, tennis racquet strings, cleats and turf, a cycling helmet), wearable tech on an athlete, data visualizations and dashboards, abstract geometric sport shapes, particle fields. Pick whichever genuinely suits the angle and sport.
+- For business/office-side topics (marketing, merchandise, ticketing, sponsorship, HR, facility/stadium operations) — tie the imagery to the ASSIGNED SPORT concretely rather than defaulting to a generic office: a sports marketing team reviewing campaign analytics on a large screen with that sport's branding/merchandise visible, a stadium ticketing/concessions operations view, a warehouse of team merchandise with inventory dashboards, a front-office meeting room with that sport's game footage on a wall display. Still no real team names/logos per the trademark rule below.
 - Humans are NOT required. When the topic or sport is better served without people, use something concrete and relevant instead (equipment, venue, gear, a scoreboard, a court/pitch/track from a striking angle) — avoid generic abstract data-viz as the default fallback; make even the no-people option feel specific to the chosen sport and topic. When you DO include people, describe them concretely and photorealistically (e.g. "a point guard mid-jump-shot in an arena, motion blur on the arm, floodlights overhead") so the renderer has a clear, natural scene to work with rather than an ambiguous one.
 - Style: cinematic, high-tech, photorealistic where possible — vary the color palette to suit the chosen sport/venue rather than always dark navy (e.g. warm clay-court tones for tennis, bright arena lighting for basketball, outdoor daylight for cycling/track).
 - Be specific and concrete rather than generic — name an actual composition and setting rather than vague descriptors alone
