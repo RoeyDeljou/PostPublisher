@@ -1,5 +1,5 @@
 {
-  "response": "This is a solid workflow improvement. The single-window approach cuts out a lot of friction, especially when you're deep in a match. How are you thinking about the edge cases — like when a pass involves a contested action (pressure applied mid-play) or when you need to correct a timestamp after the fact? Are those scenarios pulling analysts back into multi-window territory, or does the design handle them?",
+  "response": "This is a clever application of pose estimation to a real constraint — validating reps in real time is way harder than static pose classification. How are you handling the state machine across frames? Specifically, are you tracking completion of a full rep cycle (descent + ascent for squats, for example), or is it frame-level validation that's then aggregated?",
   "mode": "reply",
-  "generatedAt": "2026-08-16T21:18:42.024Z"
+  "generatedAt": "2026-08-16T21:26:04.018Z"
 }
