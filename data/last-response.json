@@ -1,5 +1,5 @@
 {
-  "response": "Nice work on the state machine for basket classification—that's where the real signal lives. How are you handling rim occlusion and the edge cases where the ball briefly crosses the line but doesn't actually go through? Curious if trajectory prediction helps smooth out those borderline calls.",
+  "response": "This is a solid workflow improvement. The single-window approach cuts out a lot of friction, especially when you're deep in a match. How are you thinking about the edge cases — like when a pass involves a contested action (pressure applied mid-play) or when you need to correct a timestamp after the fact? Are those scenarios pulling analysts back into multi-window territory, or does the design handle them?",
   "mode": "reply",
-  "generatedAt": "2026-08-16T21:14:04.133Z"
+  "generatedAt": "2026-08-16T21:18:42.024Z"
 }
