@@ -16,6 +16,11 @@ const BRAND = {
   size: 1080,
 };
 
+// Every image gets a contact CTA by default — pass contactText: null explicitly
+// to omit it (there's no current use case for omitting it, but the override
+// stays available rather than hardcoding it unconditionally).
+const DEFAULT_CONTACT_TEXT = 'DM or visit ml-innovate.com for inquiries';
+
 function ensureDir() {
   if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
 }
@@ -142,7 +147,7 @@ function drawTextWithShadow(ctx, text, x, y, shadowColor = 'rgba(0,0,0,0.85)', b
   ctx.shadowOffsetY = 0;
 }
 
-async function buildImage({ prompt, headline, engagementText, contactText = null, outputPath, notes = null }) {
+async function buildImage({ prompt, headline, engagementText, contactText = DEFAULT_CONTACT_TEXT, outputPath, notes = null }) {
   ensureDir();
   const size = BRAND.size;
   const canvas = createCanvas(size, size);
@@ -315,7 +320,7 @@ if (require.main === module) {
   const prompt = get('--prompt');
   const headline = get('--headline');
   const engagementText = get('--engagement') || 'Data-driven. Game-changing.';
-  const contactText = get('--contact');
+  const contactText = get('--contact') || undefined; // fall through to buildImage's default when omitted
   const output = get('--output') || path.join(IMAGES_DIR, `post_${Date.now()}.png`);
   if (!prompt || !headline) {
     console.error('Usage: node src/image.js --prompt "..." --headline "..." [--engagement "..."] [--contact "..."] [--output path.png]');
@@ -326,4 +331,4 @@ if (require.main === module) {
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }
 
-module.exports = { buildImage, fetchOpenAIBackground, stripEmoji, BRAND, LOGO_PATH };
+module.exports = { buildImage, fetchOpenAIBackground, stripEmoji, BRAND, LOGO_PATH, DEFAULT_CONTACT_TEXT };

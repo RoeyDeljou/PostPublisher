@@ -5,7 +5,7 @@ const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { fetchOpenAIBackground, stripEmoji, BRAND, LOGO_PATH } = require('./image');
+const { fetchOpenAIBackground, stripEmoji, BRAND, LOGO_PATH, DEFAULT_CONTACT_TEXT } = require('./image');
 
 const VIDEO_DIR = path.join(__dirname, '..', 'data', 'videos');
 const FPS = 24;
@@ -63,7 +63,7 @@ function runFfmpeg(args) {
   });
 }
 
-async function renderFrame({ ctx, size, bg, frameIndex, totalFrames, headline, engagementText, hasLogo }) {
+async function renderFrame({ ctx, size, bg, frameIndex, totalFrames, headline, engagementText, contactText, hasLogo }) {
   // ── Ken Burns slow zoom + subtle horizontal drift ──────────────────────────
   const t = frameIndex / (totalFrames - 1);
   const scale = 1.0 + 0.12 * t;
@@ -141,9 +141,36 @@ async function renderFrame({ ctx, size, bg, frameIndex, totalFrames, headline, e
     ctx.fillStyle = BRAND.accent;
     drawTextWithShadow(ctx, stripEmoji(engagementText), size / 2, underlineY + 56, engAlpha, 'rgba(0,0,0,0.8)', 10);
   }
+
+  // ── Contact footer: static throughout, same treatment as the still image ──
+  if (contactText) {
+    const footSize = 26;
+    ctx.font = `bold ${footSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const footText = stripEmoji(contactText);
+    const footWidth = ctx.measureText(footText).width;
+    const footPadX = 26, footPadY = 16;
+    const footY = size - 46;
+    const footAscent = footSize * 0.74, footDescent = footSize * 0.22;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,15,35,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(
+      size / 2 - footWidth / 2 - footPadX,
+      footY - footAscent - footPadY,
+      footWidth + footPadX * 2,
+      footAscent + footDescent + footPadY * 2,
+      12
+    );
+    ctx.fill();
+    ctx.fillStyle = BRAND.white;
+    drawTextWithShadow(ctx, footText, size / 2, footY, 1, 'rgba(0,0,0,0.85)', 10);
+    ctx.restore();
+  }
 }
 
-async function buildVideo({ prompt, headline, engagementText, outputPath, notes = null }) {
+async function buildVideo({ prompt, headline, engagementText, contactText = DEFAULT_CONTACT_TEXT, outputPath, notes = null }) {
   if (!(await hasFfmpeg())) throw new Error('ffmpeg not available on this machine');
 
   ensureDir(VIDEO_DIR);
@@ -166,7 +193,7 @@ async function buildVideo({ prompt, headline, engagementText, outputPath, notes 
     for (let i = 0; i < TOTAL_FRAMES; i++) {
       const canvas = createCanvas(size, size);
       const ctx = canvas.getContext('2d');
-      await renderFrame({ ctx, size, bg, frameIndex: i, totalFrames: TOTAL_FRAMES, headline, engagementText, hasLogo });
+      await renderFrame({ ctx, size, bg, frameIndex: i, totalFrames: TOTAL_FRAMES, headline, engagementText, contactText, hasLogo });
       const buf = await canvas.encode('png');
       fs.writeFileSync(path.join(framesDir, `frame_${String(i).padStart(4, '0')}.png`), buf);
     }
@@ -195,12 +222,13 @@ if (require.main === module) {
   const prompt = get('--prompt');
   const headline = get('--headline');
   const engagementText = get('--engagement') || 'Data-driven. Game-changing.';
+  const contactText = get('--contact') || undefined; // fall through to buildVideo's default when omitted
   const output = get('--output') || path.join(VIDEO_DIR, `post_${Date.now()}.mp4`);
   if (!prompt || !headline) {
-    console.error('Usage: node src/video.js --prompt "..." --headline "..." [--engagement "..."] [--output path.mp4]');
+    console.error('Usage: node src/video.js --prompt "..." --headline "..." [--engagement "..."] [--contact "..."] [--output path.mp4]');
     process.exit(1);
   }
-  buildVideo({ prompt, headline, engagementText, outputPath: output })
+  buildVideo({ prompt, headline, engagementText, contactText, outputPath: output })
     .then(p => console.log(JSON.stringify({ videoPath: p })))
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }

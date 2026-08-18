@@ -28,6 +28,13 @@ const TOPIC_POOL = [
   'AI-powered sports betting and fantasy sports platforms — odds modeling and integrity monitoring',
   'AI in sports organization HR and recruitment — front-office and non-playing staff hiring',
   'AI for stadium and facility operations — crowd flow, concessions, energy management',
+  'AI readiness and maturity assessment — why most sports organizations don\'t know where to start',
+  'Why off-the-shelf AI tools fail sports organizations — the case for solutions built around the actual problem',
+  'Rapid AI prototyping — validating an idea in weeks before committing budget to a full build',
+  'Volumetric capture and freeD-style computer vision — new broadcast and monetization opportunities beyond player tracking',
+  'Retrieval-Augmented Generation and AI agents for sports organizations — automating real operations, not just chatbots',
+  'Executive AI leadership — aligning AI investment with business objectives instead of chasing hype',
+  'The gap between an AI strategy deck and a shipped system — why so many sports-org AI initiatives stall',
 ];
 
 // The topic angle above is sport-agnostic; the SPORT is a separate axis that should
