@@ -37,6 +37,21 @@ const TOPIC_POOL = [
   'The gap between an AI strategy deck and a shipped system — why so many sports-org AI initiatives stall',
 ];
 
+// These topics map directly to ML-Innovation's own service areas — never name a
+// real organization for them, even a verified one. The problem should read as a
+// pattern the reader recognizes in their own organization, not a story about a
+// specific named team/company (which also sidesteps any risk of a search result
+// being thin on real detail and the model filling gaps itself).
+const NO_REAL_NAMES_TOPICS = new Set([
+  'AI readiness and maturity assessment — why most sports organizations don\'t know where to start',
+  'Why off-the-shelf AI tools fail sports organizations — the case for solutions built around the actual problem',
+  'Rapid AI prototyping — validating an idea in weeks before committing budget to a full build',
+  'Volumetric capture and freeD-style computer vision — new broadcast and monetization opportunities beyond player tracking',
+  'Retrieval-Augmented Generation and AI agents for sports organizations — automating real operations, not just chatbots',
+  'Executive AI leadership — aligning AI investment with business objectives instead of chasing hype',
+  'The gap between an AI strategy deck and a shipped system — why so many sports-org AI initiatives stall',
+]);
+
 // The topic angle above is sport-agnostic; the SPORT is a separate axis that should
 // rotate independently so the same "soccer training pitch" image doesn't recur every post.
 const SPORT_POOL = [
@@ -84,7 +99,9 @@ POST STRUCTURE:
 
 POSITIONING — this is a services company, not a media outlet or a tutorial account. Every post should make the reader recognize a real problem in their own organization and trust that ML-Innovation has the expertise to solve it — NEVER explain the actual method, architecture, tool stack, or step-by-step approach in enough detail that the reader's own team could replicate the solution without engaging us. This applies especially to posts about ML-Innovation's own service areas (AI strategy, consulting, prototyping, computer vision, AI agents, executive AI leadership) — name the pain point precisely, establish that it's solvable with the right expertise, and stop there. Citing a real THIRD-PARTY case study or public stat (per DATA INTEGRITY) is fine and encouraged — that's proof the problem is real, not a leak of our own methodology. The difference: "the NFL cut concussions 17% using AI-driven insights" (fine — someone else's public result) vs. explaining the actual pipeline you'd build to do it (never — that's the part they need to talk to us for).
 
-DATA INTEGRITY — you have a web_search tool. Use it at least once per post to find one real, specific, recent statistic, study finding, or case study relevant to this post's topic and sport. NEVER invent a specific number, percentage, or named case study — every specific figure in the post must come from an actual search result. If search doesn't turn up a solid, relevant figure, fall back to qualitative language ("a growing number of clubs", "a noticeable drop in soft-tissue injuries") instead of a fabricated precise number. When citing the stat, name the actual source in natural prose (the league, publication, study, or organization — e.g. "the NFL's own 2024 injury data showed...") rather than pasting a raw URL, which reads as spammy on LinkedIn. Prefer authoritative sources (leagues, official team statements, peer-reviewed research, established sports-science or industry publications) over random blogs when multiple results are available. After searching, your final message must be ONLY the JSON object — no preamble, no commentary about your search, no markdown fences. NEVER write literal <cite> tags or citation markup (e.g. <cite index="7-9">) inside any field — name the source in plain prose instead, the way a person would write it.
+DATA INTEGRITY — NEVER fabricate any fact in any post. This is an absolute rule, not limited to statistics: it covers numbers, named case studies, claims about how a technology works, claims about what a study found, claims about an industry trend, or any other assertion presented as true. If you did not get it from an actual search result (or it isn't something you're genuinely certain is true), do not state it as fact — rephrase as a general/qualitative point instead, or drop it.
+
+You have a web_search tool. Use it at least once per post to find one real, specific, recent statistic, study finding, or case study relevant to this post's topic and sport. NEVER invent a specific number, percentage, or named case study — every specific figure in the post must come from an actual search result. If search doesn't turn up a solid, relevant figure, fall back to qualitative language ("a growing number of clubs", "a noticeable drop in soft-tissue injuries") instead of a fabricated precise number. When citing the stat, name the actual source in natural prose (the league, publication, study, or organization — e.g. "the NFL's own 2024 injury data showed...") rather than pasting a raw URL, which reads as spammy on LinkedIn. Prefer authoritative sources (leagues, official team statements, peer-reviewed research, established sports-science or industry publications) over random blogs when multiple results are available. After searching, your final message must be ONLY the JSON object — no preamble, no commentary about your search, no markdown fences. NEVER write literal <cite> tags or citation markup (e.g. <cite index="7-9">) inside any field — name the source in plain prose instead, the way a person would write it.
 
 NAMED-ORGANIZATION CASE STUDIES — a stricter rule than the general one above, because getting this wrong means fabricating claims about a real organization's internal operations, which is a real reputational and factual-accuracy risk, not just a stylistic one. If you name a real team, league, or company, EVERY specific detail about what happened inside it — what they did, what changed, what problem they had internally, any internal process or dysfunction — must come directly from your search results. Do not extrapolate or invent plausible-sounding internal specifics just because a general premise is true (e.g. knowing a team "had a rough season" does NOT license inventing details about their internal decision process, data-sharing, or organizational dysfunction — that part would be fabricated even though the premise is real). If search only surfaces a general, surface-level fact with no real operational detail behind it, do NOT fill the gap yourself — either use a hypothetical/composite framing instead ("one front office we've seen..." / "it's a common pattern across front offices...") without naming a real organization, or drop the named example and make the point qualitatively. A single verified, specific stat (per DATA INTEGRITY above) is inherently safer than a constructed narrative "case study" — prefer it when in doubt.
 
@@ -212,10 +229,14 @@ async function generateContent(recentPosts = [], regenerationNotes = null) {
     ? `\n\nIMAGE STYLE GUIDANCE (apply to imagePrompt):\n${template.styleNotes}`
     : '';
 
+  const noRealNamesSection = NO_REAL_NAMES_TOPICS.has(field)
+    ? `\n\nNO REAL NAMES FOR THIS TOPIC: do not name any real team, league, company, or organization ANYWHERE in this post, even a verified real one, and even in passing — this includes naming which real league or team's data a cited study happened to use. Describe the problem and pattern in general terms only ("many sports organizations", "a common pattern across front offices", "teams we talk to"). A real statistic or study finding is still fine to cite (per DATA INTEGRITY) — attribute it to "published research" / "a peer-reviewed study" / "recent academic research" WITHOUT naming which specific league, team, or dataset it used. Do not describe independent academic research as if it were a named organization's own internal work (e.g. don't write "a research team at [League]" when the truth is researchers used that league's public dataset — that misattributes authorship).`
+    : '';
+
   const userMessage = `Today's date: ${new Date().toISOString().split('T')[0]}
 Scheduled for: ${scheduledFor}
 
-TOPIC FIELD FOR THIS POST: ${field} — write about a SPECIFIC, narrow issue or angle within this field (don't just restate the field name as the angle).${avoidSection}
+TOPIC FIELD FOR THIS POST: ${field} — write about a SPECIFIC, narrow issue or angle within this field (don't just restate the field name as the angle).${avoidSection}${noRealNamesSection}
 
 SPORT FOR THIS IMAGE: ${sport} — use this exact sport in imagePrompt, see IMAGE PROMPT RULES.${notesSection}${styleSection}
 
