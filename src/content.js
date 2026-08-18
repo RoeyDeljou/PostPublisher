@@ -83,6 +83,7 @@ CRITICAL FORMATTING RULES — LinkedIn renders plain text only:
 - Hashtags go at the very end, on their own line, space-separated
 - Max 3000 characters total
 - NEVER use double quotation marks (") anywhere inside the body, hashtags, or any text field — your entire response must be valid JSON, and a stray " inside a string breaks parsing. If you need to quote a phrase, use single quotes (') instead.
+- NEVER use the em dash (—) anywhere, in any field. Use a period to split into two sentences, a comma, a colon, or a regular hyphen with spaces ( - ) instead, whichever reads most naturally in context.
 
 HOOK LINE — this single line decides whether anyone reads further. It MUST be one of:
 - A specific, counter-intuitive statistic ("87% of season-ending injuries were predictable 72 hours out.")
@@ -138,11 +139,15 @@ JSON schema (return EXACTLY this shape):
 // The web_search tool sometimes leaks its citation markup into the model's own
 // generated prose as literal <cite index="N-M">...</cite> tags — strip them,
 // keeping the wrapped text, on every string field (not just body) since it can
-// show up in the angle or headline too.
+// show up in the angle or headline too. Also normalizes em dashes (—) to a
+// plain hyphen with spacing — the prompt rule alone doesn't reliably stop the
+// model from reaching for it as a stylistic habit, same lesson as cite tags.
+// Used everywhere generated text passes through, including src/respond.js.
 function stripCiteTags(text) {
   return String(text || '')
     .replace(/<cite[^>]*>(.*?)<\/cite>/gis, '$1')
     .replace(/<\/?cite[^>]*>/gi, '')
+    .replace(/\s*—\s*/g, ' - ')
     .trim();
 }
 
