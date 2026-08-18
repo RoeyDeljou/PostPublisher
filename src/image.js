@@ -142,7 +142,7 @@ function drawTextWithShadow(ctx, text, x, y, shadowColor = 'rgba(0,0,0,0.85)', b
   ctx.shadowOffsetY = 0;
 }
 
-async function buildImage({ prompt, headline, engagementText, outputPath, notes = null }) {
+async function buildImage({ prompt, headline, engagementText, contactText = null, outputPath, notes = null }) {
   ensureDir();
   const size = BRAND.size;
   const canvas = createCanvas(size, size);
@@ -277,6 +277,31 @@ async function buildImage({ prompt, headline, engagementText, outputPath, notes 
     drawTextWithShadow(ctx, stripEmoji(engagementText), size / 2, underlineY + 56, 'rgba(0,0,0,0.8)', 10);
   }
 
+  // ── 8b. Contact footer (optional) — small pill near the bottom edge ───────
+  if (contactText) {
+    const footSize = 26;
+    ctx.font = `bold ${footSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const footText = stripEmoji(contactText);
+    const footWidth = ctx.measureText(footText).width;
+    const footPadX = 26, footPadY = 16;
+    const footY = size - 46;
+    const footAscent = footSize * 0.74, footDescent = footSize * 0.22;
+    ctx.fillStyle = 'rgba(5,15,35,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(
+      size / 2 - footWidth / 2 - footPadX,
+      footY - footAscent - footPadY,
+      footWidth + footPadX * 2,
+      footAscent + footDescent + footPadY * 2,
+      12
+    );
+    ctx.fill();
+    ctx.fillStyle = BRAND.white;
+    drawTextWithShadow(ctx, footText, size / 2, footY, 'rgba(0,0,0,0.85)', 10);
+  }
+
   // ── 9. Save ──────────────────────────────────────────────────────────────
   const buf = await canvas.encode('png');
   fs.writeFileSync(outputPath, buf);
@@ -290,12 +315,13 @@ if (require.main === module) {
   const prompt = get('--prompt');
   const headline = get('--headline');
   const engagementText = get('--engagement') || 'Data-driven. Game-changing.';
+  const contactText = get('--contact');
   const output = get('--output') || path.join(IMAGES_DIR, `post_${Date.now()}.png`);
   if (!prompt || !headline) {
-    console.error('Usage: node src/image.js --prompt "..." --headline "..." [--engagement "..."] [--output path.png]');
+    console.error('Usage: node src/image.js --prompt "..." --headline "..." [--engagement "..."] [--contact "..."] [--output path.png]');
     process.exit(1);
   }
-  buildImage({ prompt, headline, engagementText, outputPath: output })
+  buildImage({ prompt, headline, engagementText, contactText, outputPath: output })
     .then(p => console.log(JSON.stringify({ imagePath: p, width: 1080, height: 1080, prompt })))
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }
