@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { createCanvas, loadImage } = require('@napi-rs/canvas');
+const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -10,10 +10,20 @@ const http = require('http');
 const IMAGES_DIR = path.join(__dirname, '..', 'data', 'images');
 const LOGO_PATH = path.join(__dirname, '..', 'data', 'logo.png');
 
+// The generic 'sans-serif' font family resolves to whatever's installed on the
+// machine — Arial/Segoe UI locally on Windows, some Linux default on GitHub's
+// ubuntu-latest runner — which don't render identically (numerals in particular
+// came out visibly smaller than letters at the same font-size in the system
+// font). Bundling our own font guarantees identical output everywhere.
+const FONT_PATH = path.join(__dirname, '..', 'data', 'fonts', 'ArchivoBlack-Regular.ttf');
+const FONT_FAMILY = 'Archivo Black';
+if (fs.existsSync(FONT_PATH)) GlobalFonts.registerFromPath(FONT_PATH, FONT_FAMILY);
+
 const BRAND = {
   accent: '#00C896',
   white: '#FFFFFF',
   size: 1080,
+  font: FONT_FAMILY,
 };
 
 // Every image gets a contact CTA by default — pass contactText: null explicitly
@@ -200,7 +210,7 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
   }
 
   function drawNameAt(x, y, align) {
-    ctx.font = 'bold 24px sans-serif';
+    ctx.font = `bold 24px "${BRAND.font}"`;
     ctx.fillStyle = BRAND.white;
     ctx.textAlign = align;
     ctx.textBaseline = 'middle';
@@ -228,7 +238,7 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
 
   // ── 6. Main headline (centered, large, with high-contrast backdrop) ──────────
   const headSize = headline.length > 45 ? 60 : headline.length > 32 ? 68 : headline.length > 20 ? 78 : 88;
-  ctx.font = `bold ${headSize}px sans-serif`;
+  ctx.font = `bold ${headSize}px "${BRAND.font}"`;
   ctx.fillStyle = BRAND.white;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
@@ -275,7 +285,7 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
 
   // ── 8. Engagement sub-text ────────────────────────────────────────────────
   if (engagementText) {
-    ctx.font = 'bold 32px sans-serif';
+    ctx.font = `bold 32px "${BRAND.font}"`;
     ctx.fillStyle = BRAND.accent;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
@@ -285,7 +295,7 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
   // ── 8b. Contact footer (optional) — small pill near the bottom edge ───────
   if (contactText) {
     const footSize = 26;
-    ctx.font = `bold ${footSize}px sans-serif`;
+    ctx.font = `bold ${footSize}px "${BRAND.font}"`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     const footText = stripEmoji(contactText);

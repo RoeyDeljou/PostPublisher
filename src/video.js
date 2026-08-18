@@ -94,7 +94,7 @@ async function renderFrame({ ctx, size, bg, frameIndex, totalFrames, headline, e
   const headlineOffsetY = (1 - headlineEase) * 24;
 
   const headSize = headline.length > 45 ? 60 : headline.length > 32 ? 68 : headline.length > 20 ? 78 : 88;
-  ctx.font = `bold ${headSize}px sans-serif`;
+  ctx.font = `bold ${headSize}px "${BRAND.font}"`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   const headLines = measureAndWrap(ctx, stripEmoji(headline).toUpperCase(), size - 120);
@@ -136,7 +136,7 @@ async function renderFrame({ ctx, size, bg, frameIndex, totalFrames, headline, e
     const engDelayFrames = Math.round(totalFrames * (0.3 / DURATION_SEC));
     const engProgress = Math.min(1, Math.max(0, frameIndex - engDelayFrames) / fadeInFrames);
     const engAlpha = easeOutCubic(engProgress);
-    ctx.font = 'bold 32px sans-serif';
+    ctx.font = `bold 32px "${BRAND.font}"`;
     ctx.textAlign = 'center';
     ctx.fillStyle = BRAND.accent;
     drawTextWithShadow(ctx, stripEmoji(engagementText), size / 2, underlineY + 56, engAlpha, 'rgba(0,0,0,0.8)', 10);
@@ -145,7 +145,7 @@ async function renderFrame({ ctx, size, bg, frameIndex, totalFrames, headline, e
   // ── Contact footer: static throughout, same treatment as the still image ──
   if (contactText) {
     const footSize = 26;
-    ctx.font = `bold ${footSize}px sans-serif`;
+    ctx.font = `bold ${footSize}px "${BRAND.font}"`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     const footText = stripEmoji(contactText);

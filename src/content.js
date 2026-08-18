@@ -88,7 +88,12 @@ HOOK LINE — this single line decides whether anyone reads further. It MUST be 
 - A specific, counter-intuitive statistic ("87% of season-ending injuries were predictable 72 hours out.")
 - A bold claim that challenges conventional wisdom ("Scouts have been wrong about talent for decades — and they finally know why.")
 - A curiosity-gap question that creates an itch the reader needs scratched ("The best pass in football last season wasn't made by a player.")
+- A vivid moment or scene ("It's the 89th minute and the analytics dashboard already called it.")
+- A contrarian one-liner ("The best scouting systems don't scout better. They scout differently.")
+- A third-person industry observation ("Most front offices can name their data problem. Almost none have fixed it.")
 NEVER open with "I'm excited to share", "In today's world", or any generic scene-setting. The hook stands alone as line one — no lead-in.
+
+VARY THE OPENING STRUCTURE — "Your [noun] is/does X" (direct second-person address) has become the reflexive default and it's now repetitive across posts; don't let it be the automatic choice. Rotate deliberately between direct address ("Your..."), third-person/industry framing ("Most teams...", "Sports organizations...", "Front offices that..."), a vivid scene, a number-led statement, and a contrarian one-liner — pick whichever fits the topic AND is structurally different from recent posts (check RECENTLY COVERED below; if recent posts opened with "Your...", use a different structure this time). This applies to sentence rhythm and paragraph structure throughout the post too, not just the first line — vary where the example/stat lands, how paragraphs are sequenced, and how the CTA is phrased, so posts don't all read like the same template with different words swapped in.
 
 POST STRUCTURE:
 1. The hook line (see above)
@@ -213,7 +218,7 @@ async function generateContent(recentPosts = [], regenerationNotes = null) {
   const field = nextTopic(TOPIC_POOL);
 
   const avoidSection = recentPosts.length > 0
-    ? `\n\nRECENTLY COVERED (do NOT repeat these angles — if this post lands in the same field, tackle a clearly different specific issue or sub-problem instead):\n${recentPosts.slice(0, 7).map((p, i) => `${i + 1}. [${p.angle || '?'}] ${(p.body || '').substring(0, 100)}...`).join('\n')}`
+    ? `\n\nRECENTLY COVERED (do NOT repeat these angles — if this post lands in the same field, tackle a clearly different specific issue or sub-problem instead. Also check how each one OPENS — if several start with "Your...", deliberately use a different opening structure per VARY THE OPENING STRUCTURE above):\n${recentPosts.slice(0, 7).map((p, i) => `${i + 1}. [${p.angle || '?'}] ${(p.body || '').substring(0, 100)}...`).join('\n')}`
     : '';
 
   const tomorrow = new Date();
@@ -230,7 +235,13 @@ async function generateContent(recentPosts = [], regenerationNotes = null) {
     : '';
 
   const noRealNamesSection = NO_REAL_NAMES_TOPICS.has(field)
-    ? `\n\nNO REAL NAMES FOR THIS TOPIC: do not name any real team, league, company, or organization ANYWHERE in this post, even a verified real one, and even in passing — this includes naming which real league or team's data a cited study happened to use. Describe the problem and pattern in general terms only ("many sports organizations", "a common pattern across front offices", "teams we talk to"). A real statistic or study finding is still fine to cite (per DATA INTEGRITY) — attribute it to "published research" / "a peer-reviewed study" / "recent academic research" WITHOUT naming which specific league, team, or dataset it used. Do not describe independent academic research as if it were a named organization's own internal work (e.g. don't write "a research team at [League]" when the truth is researchers used that league's public dataset — that misattributes authorship).`
+    ? `\n\nTHIS IS ONE OF ML-INNOVATION'S OWN SERVICE-AREA TOPICS — three extra rules apply:
+
+1. NO REAL NAMES: do not name any real team, league, company, or organization ANYWHERE in this post, even a verified real one, and even in passing — this includes naming which real league or team's data a cited study happened to use. Describe the problem and pattern in general terms only ("many sports organizations", "a common pattern across front offices", "teams we talk to"). A real statistic or study finding is still fine to cite (per DATA INTEGRITY) — attribute it to "published research" / "a peer-reviewed study" / "recent academic research" WITHOUT naming which specific league, team, or dataset it used. Do not describe independent academic research as if it were a named organization's own internal work (e.g. don't write "a research team at [League]" when the truth is researchers used that league's public dataset — that misattributes authorship).
+
+2. WRITE TO THE ORGANIZATIONS LIVING THIS PROBLEM: don't write neutral industry commentary — write as if speaking directly to the sports organizations struggling with this exact issue right now, so the reader thinks "that's us." Make clear ML-Innovation has seen this pattern before and knows how to fix it, without yet saying how (per POSITIONING).
+
+3. EXPLICIT CONTACT CTA: the closing line must be a direct invitation for organizations who relate to this problem to contact ML-Innovation and discuss it privately (e.g. "If this is where your organization is stuck, contact us — let's talk about what's possible." / "Recognize this in your own operation? Reach out and let's discuss it."). Don't leave the CTA as just an open question here — make the "get in touch" ask explicit, though the phrasing should still vary post to post rather than reusing the same sentence.`
     : '';
 
   const userMessage = `Today's date: ${new Date().toISOString().split('T')[0]}
