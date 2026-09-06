@@ -72,7 +72,9 @@ function getDurationSec(filePath) {
 
 const SCRIPT_SYSTEM_PROMPT = `You are writing a short SPOKEN-WORD VIDEO NARRATION script for "ML-Innovation" — a company at the intersection of artificial intelligence and professional sport. If you name the company, it is ALWAYS "ML-Innovation" — never any other name.
 
-This is narration for a ~20-25 second video (roughly 55-70 words at a natural speaking pace) — one flowing paragraph meant to be READ ALOUD, not a LinkedIn post. No hashtags, no line breaks, no markdown, no emojis.
+This is narration for a ~20-25 second video - one flowing paragraph meant to be READ ALOUD, not a LinkedIn post. No hashtags, no line breaks, no markdown, no emojis.
+
+HARD LENGTH LIMIT: 70 words maximum, no exceptions - count as you write. This applies even when the topic angle given to you is long, nuanced, or multi-part (e.g. a complex format/venue/role scenario): your job is to compress it down to the ONE simplest, most concrete takeaway a listener could grasp on first hearing, not to explain the nuance. A longer, more complete explanation is a FAILURE here even if it's more accurate to the source topic - simplifying further is always the right move over running long.
 
 Rules:
 - Open with a punchy, attention-grabbing line (a claim, a scene, or a question) since the video needs to hook someone scrolling within the first couple seconds.
@@ -90,6 +92,16 @@ TRADEMARK RISK — this is real footage, not an AI generation we can steer away 
 Return ONLY this JSON shape, nothing else:
 { "script": "<the narration text>", "keywords": ["<phrase 1>", "<phrase 2>", "<phrase 3>"] }`;
 
+// The prompt's 70-word hard cap isn't always obeyed for a long/nuanced topic
+// angle (seen in testing: a complex format/venue scenario produced a 150+
+// word script, a 50s video instead of ~20-25s) - a code-level check with one
+// corrective retry catches that instead of silently shipping an oversized
+// video. Even after strengthening the prompt, outputs still commonly landed
+// at 80-84 words - set the threshold at 75 (a little above the 70-word
+// prompt limit for natural variance) so those still trigger the retry
+// instead of shipping a video noticeably longer than intended.
+const MAX_SCRIPT_WORDS = 75;
+
 async function generateNarrationScript({ angle, body, imagePrompt, notes }) {
   const client = new Anthropic();
   const notesSection = notes ? `\n\nADDITIONAL GUIDANCE:\n${notes}` : '';
@@ -102,9 +114,19 @@ Background scene concept (tells you the assigned sport for this post): ${imagePr
 
 Write the narration script and stock-footage keywords now. Return only JSON.`;
 
-  const payload = await callClaudeForJson(client, SCRIPT_SYSTEM_PROMPT, userMessage, {});
+  let payload = await callClaudeForJson(client, SCRIPT_SYSTEM_PROMPT, userMessage, {});
+  let script = stripCiteTags(payload.script || '').trim();
+  let wordCount = script.split(/\s+/).filter(Boolean).length;
+
+  if (wordCount > MAX_SCRIPT_WORDS) {
+    const retryMessage = `${userMessage}\n\nYour previous attempt was ${wordCount} words, which is far too long for a ~20-25 second video: "${script}"\n\nRewrite it to 70 words or fewer by simplifying to the single most concrete takeaway - do not just trim sentences, cut the scope of what you're trying to explain. Return only JSON.`;
+    payload = await callClaudeForJson(client, SCRIPT_SYSTEM_PROMPT, retryMessage, {});
+    script = stripCiteTags(payload.script || '').trim();
+    wordCount = script.split(/\s+/).filter(Boolean).length;
+  }
+
   return {
-    script: stripCiteTags(payload.script || '').trim(),
+    script,
     keywords: Array.isArray(payload.keywords) ? payload.keywords.filter(Boolean).map(String) : [],
   };
 }
