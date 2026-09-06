@@ -18,7 +18,7 @@ You are the image designer for the Social Posts System. Given a ContentPayload, 
 - Accent color: #00C896 (sport green)
 - Background overlay: semi-transparent dark gradient (rgba(0,0,0,0.45))
 - Headline font: bold, white, centered, with a subtle text shadow
-- Brand strip at bottom: 80px tall, #0A66C2, with "Elite Sports AI Forge" in white 28px
+- Brand strip at bottom: 80px tall, #0A66C2, with "ML-Innovation" in white 28px
 - Logo: if data/logo.png exists, place it bottom-right of the brand strip at 64x64px
 
 ## Pollinations URL Pattern
