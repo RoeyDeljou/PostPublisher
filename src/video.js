@@ -31,7 +31,8 @@ const HEIGHT = 1350;
 // more human/expressive than the older base neural voices - use one of those
 // as the default rather than the flatter-sounding en-US-GuyNeural.
 const NARRATION_VOICE = process.env.NARRATION_VOICE || 'en-US-AndrewMultilingualNeural';
-const CLIP_COUNT = 3;
+const SPORT_CLIP_COUNT = 3;
+const TECH_CLIP_COUNT = 2;
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -85,12 +86,15 @@ Rules:
 - NEVER use the em dash (—) anywhere — use a period, comma, colon, or a regular hyphen with spaces ( - ) instead.
 - CLOSING LINE (required, spend your last ~5-8 words on this): a direct, specific invitation to reach out to ML-Innovation and discuss it - not a vague "food for thought" close and not a hard sales pitch, a genuine, natural-sounding invitation to talk (e.g. "If that sounds like your organization, let's talk." / "Curious what that could look like for your team? Get in touch."). It must still sound like something a person would actually say out loud, not an ad slogan.
 
-Also provide 3 short stock-footage search phrases (2-4 words each, in English) for a general stock-video library search (Pexels/Pixabay). These searches are keyword-matched, not meaning-matched, so vague or tech/office words ("tablet", "data", "screen", "analytics", "dashboard", "AI", "overlay", "computer", "laptop") pull totally unrelated generic business-and-gadget footage instead of sport footage — NEVER use words like that in a keyword phrase, even if the script itself mentions data or technology. Every single keyword phrase MUST contain the assigned sport's name (or its venue/equipment, e.g. "pitch", "court", "arena", "track") so the search can't drift off-topic.
+Also provide TWO categories of short stock-footage search phrases (2-4 words each, in English) for a general stock-video library search (Pexels/Pixabay) - the video should visually alternate between the sport itself and the technology/data side, to actually demonstrate the range of fields ML-Innovation works in, not just show sport footage with a voiceover about AI over it.
 
-TRADEMARK RISK — this is real footage, not an AI generation we can steer away from logos, so avoid the keyword shapes most likely to surface an actual named club's branded stadium (team crests, sponsor boards, seat-back branding, painted stadium names are common in real footage of professional stadiums and would look like an unauthorized endorsement on a business page): prefer AERIAL/WIDE pitch shots, TRAINING/practice footage, and close-up action or equipment over ground-level spectator-stand shots of a named professional stadium. Never use the bare word "stadium" alone as or within a keyword - use "training pitch", "training session", "aerial pitch", "match action", or sport-specific equipment instead. Good examples: "football training session", "football aerial pitch", "basketball arena crowd" (crowd/court angle, not team branding), "tennis court aerial". Bad examples: "coach reviewing tablet" (irrelevant results), "football stadium" or "football scout stadium" (surfaces real branded professional stadiums).
+1. "sportKeywords" (exactly 3 phrases) - real sport action/training/venue shots. Every phrase MUST contain the assigned sport's name (or its venue/equipment, e.g. "pitch", "court", "arena", "track") so the search can't drift off-topic. NEVER use tech/office words here ("tablet", "data", "screen", "analytics", "dashboard", "computer", "laptop") - those pull unrelated generic business-and-gadget footage instead of sport footage.
+   TRADEMARK RISK - this is real footage, not an AI generation we can steer away from logos, so avoid the keyword shapes most likely to surface an actual named club's branded stadium (team crests, sponsor boards, seat-back branding, painted stadium names are common in real footage of professional stadiums and would look like an unauthorized endorsement on a business page): prefer AERIAL/WIDE pitch shots, TRAINING/practice footage, and close-up action or equipment over ground-level spectator-stand shots of a named professional stadium. Never use the bare word "stadium" alone as or within a keyword - use "training pitch", "training session", "aerial pitch", "match action", or sport-specific equipment instead. Good examples: "football training session", "football aerial pitch", "basketball arena crowd" (crowd/court angle, not team branding), "tennis court aerial". Bad: "football stadium" or "football scout stadium" (surfaces real branded professional stadiums).
+
+2. "techKeywords" (exactly 2 phrases) - the technology/business side of sport: a coach or scout briefing a team, a tactics board or whiteboard session, a digital scoreboard, a staff meeting or huddle discussing strategy. Confirmed by testing actual search results: "data", "analytics", "statistics", "laptop", "tablet", "screen" (alone), "monitor", or "dashboard" in a query - even with a sport word attached - overwhelmingly returns generic STOCK-MARKET AND FINANCE footage instead of anything sports-related, because that's what stock libraries mostly tag those words with. NEVER use those words here. Instead use: "scoreboard screen" (a real piece of sports tech), "tactics board", "coach whiteboard", "coaching staff meeting", "team strategy meeting", "team huddle discussion" - these reliably return either genuine sports-technology footage or clean generic professional office/meeting footage, which reads perfectly well as "the analysis side" alongside the narration. Each phrase should still include a sports/coaching context word where natural (the assigned sport's name, "coach", "team", "coaching staff"). Good examples: "football tactics board", "coaching staff meeting", "sports scoreboard screen", "team huddle discussion". Bad: "sports data analytics screen", "football data visualization", "analyst reviewing chart" (all confirmed to return finance/stock-market footage instead).
 
 Return ONLY this JSON shape, nothing else:
-{ "script": "<the narration text>", "keywords": ["<phrase 1>", "<phrase 2>", "<phrase 3>"] }`;
+{ "script": "<the narration text>", "sportKeywords": ["<phrase 1>", "<phrase 2>", "<phrase 3>"], "techKeywords": ["<phrase 1>", "<phrase 2>"] }`;
 
 // The prompt's 70-word hard cap isn't always obeyed for a long/nuanced topic
 // angle (seen in testing: a complex format/venue scenario produced a 150+
@@ -125,9 +129,11 @@ Write the narration script and stock-footage keywords now. Return only JSON.`;
     wordCount = script.split(/\s+/).filter(Boolean).length;
   }
 
+  const sportKeywords = Array.isArray(payload.sportKeywords) ? payload.sportKeywords.filter(Boolean).map(String) : [];
   return {
     script,
-    keywords: Array.isArray(payload.keywords) ? payload.keywords.filter(Boolean).map(String) : [],
+    sportKeywords: enforceSportWordInKeywords(sportKeywords),
+    techKeywords: Array.isArray(payload.techKeywords) ? payload.techKeywords.filter(Boolean).map(String) : [],
   };
 }
 
@@ -229,10 +235,18 @@ const FOOTAGE_KEYWORD_STOPWORDS = new Set([
 function keywordTokens(kw) {
   return kw.toLowerCase().split(/\s+/).filter(w => w.length >= 4 && !FOOTAGE_KEYWORD_STOPWORDS.has(w));
 }
+// A "tech" query (scoreboard, tactics board, meeting...) can still slip into
+// generic stock-market/finance b-roll - confirmed repeatedly in testing that
+// this is the single most common false-positive category for this kind of
+// search on Pexels/Pixabay. A hard negative match here overrides an
+// otherwise-relevant-looking slug, since a finance clip in a sports-AI
+// company's video reads as a mistake regardless of how it got picked.
+const FINANCE_DRIFT_WORDS = ['stock-market', 'stock market', 'trading', 'financial', 'finance', 'cryptocurrency', 'crypto', 'invest'];
 function looksRelevant(url, kw) {
+  const slug = url.toLowerCase();
+  if (FINANCE_DRIFT_WORDS.some(w => slug.includes(w))) return false;
   const tokens = keywordTokens(kw);
   if (!tokens.length) return true;
-  const slug = url.toLowerCase();
   return tokens.some(t => slug.includes(t));
 }
 function rankByRelevance(results, kw) {
@@ -241,13 +255,34 @@ function rankByRelevance(results, kw) {
   return [...relevant, ...rest];
 }
 
-async function fetchStockClips(keywords, fallbackKeyword, tempDir) {
-  // Search every keyword up front (each returns several candidates) so we can
-  // take ONE clip per keyword first - each keyword describes a different shot
-  // (training, aerial, action, ...), so this actually gives the video visual
-  // variety instead of all 3 clips silently coming from whichever keyword was
-  // searched first, which is what happened when this just concatenated every
-  // result and cut it off at CLIP_COUNT.
+// The prompt requires every sportKeyword to contain the assigned sport's
+// name, but the model doesn't always comply (seen in testing: 2 of 3
+// keywords said "football ...", the 3rd was just "match action close-up") -
+// when that happens, keywordTokens() for the non-compliant phrase is EMPTY
+// (every word in it is a generic stopword), so looksRelevant() has nothing
+// to check and lets anything through unfiltered, which is how a badminton
+// racket clip ended up in a football video. Detect the sport word by finding
+// whichever distinctive word recurs across at least 2 of the keywords, and
+// prepend it to any keyword missing it, before searching.
+function enforceSportWordInKeywords(keywords) {
+  const wordCounts = new Map();
+  for (const kw of keywords) {
+    const words = new Set(keywordTokens(kw));
+    for (const w of words) wordCounts.set(w, (wordCounts.get(w) || 0) + 1);
+  }
+  let sportWord = null, bestCount = 0;
+  for (const [w, c] of wordCounts) {
+    if (c > bestCount) { bestCount = c; sportWord = w; }
+  }
+  if (!sportWord || bestCount < 2) return keywords;
+  return keywords.map(kw => kw.toLowerCase().includes(sportWord) ? kw : `${sportWord} ${kw}`);
+}
+
+// Search every keyword in the group up front (each returns several
+// candidates) so we can take ONE clip per keyword first - each keyword
+// describes a different shot, so this actually gives visual variety instead
+// of all clips silently coming from whichever keyword was searched first.
+async function resolveUrlsForKeywordGroup(keywords, count) {
   const perKeywordResults = [];
   for (const kw of keywords) {
     const found = await searchAnyProvider(kw);
@@ -260,16 +295,46 @@ async function fetchStockClips(keywords, fallbackKeyword, tempDir) {
   }
   outer: for (const results of perKeywordResults) {
     for (const u of results.slice(1)) {
-      if (urls.length >= CLIP_COUNT) break outer;
+      if (urls.length >= count) break outer;
       if (!urls.includes(u)) urls.push(u);
     }
   }
-  if (!urls.length && fallbackKeyword) {
-    urls.push(...await searchAnyProvider(fallbackKeyword));
-  }
-  if (!urls.length) throw new Error('No stock footage found for any search keyword');
+  return [...new Set(urls)].slice(0, count);
+}
 
-  const uniqueUrls = [...new Set(urls)].slice(0, CLIP_COUNT);
+// Sourced as two separate groups - real sport action, and the technology/data
+// side of sport (analysts, screens, graphs, strategy meetings) - then
+// interleaved (sport, tech, sport, tech, sport) so the video actually
+// demonstrates both the sport itself and the tech/data work ML-Innovation
+// does around it, rather than just sport footage under an AI voiceover.
+async function fetchStockClips({ sportKeywords, techKeywords, fallbackKeyword, tempDir }) {
+  const sportUrls = await resolveUrlsForKeywordGroup(
+    sportKeywords.length ? sportKeywords : [fallbackKeyword],
+    SPORT_CLIP_COUNT
+  );
+  const finalSportUrls = sportUrls.length || !fallbackKeyword
+    ? sportUrls
+    : await searchAnyProvider(fallbackKeyword);
+  if (!finalSportUrls.length) throw new Error('No stock footage found for any search keyword');
+
+  // Tech footage is a nice-to-have, not required - if the tech keywords
+  // somehow turn up nothing, degrade gracefully to an all-sport video rather
+  // than failing the whole build over the less essential half of the mix.
+  let techUrls = [];
+  if (techKeywords && techKeywords.length) {
+    try { techUrls = await resolveUrlsForKeywordGroup(techKeywords, TECH_CLIP_COUNT); }
+    catch { techUrls = []; }
+  }
+
+  const interleaved = [];
+  const sportQueue = [...finalSportUrls];
+  const techQueue = [...techUrls];
+  while (sportQueue.length || techQueue.length) {
+    if (sportQueue.length) interleaved.push(sportQueue.shift());
+    if (techQueue.length) interleaved.push(techQueue.shift());
+  }
+
+  const uniqueUrls = [...new Set(interleaved)];
   const clipPaths = [];
   for (let i = 0; i < uniqueUrls.length; i++) {
     const dest = path.join(tempDir, `clip_${i}.mp4`);
@@ -355,7 +420,7 @@ async function buildVideo({ prompt, headline, angle, body, contactText = DEFAULT
   ensureDir(tempDir);
 
   try {
-    const { script, keywords } = await generateNarrationScript({ angle, body, imagePrompt: prompt, notes });
+    const { script, sportKeywords, techKeywords } = await generateNarrationScript({ angle, body, imagePrompt: prompt, notes });
     if (!script) throw new Error('Narration script generation returned an empty script');
 
     const { audioPath: narrationPath, wordBoundaries } = await synthesizeNarration(script, path.join(tempDir, 'narration'));
@@ -363,7 +428,7 @@ async function buildVideo({ prompt, headline, angle, body, contactText = DEFAULT
     const captionCues = buildCaptionCues(wordBoundaries);
 
     const fallbackKeyword = (prompt || headline || 'sports training').split(',')[0].trim();
-    const clipPaths = await fetchStockClips(keywords.length ? keywords : [fallbackKeyword], fallbackKeyword, tempDir);
+    const clipPaths = await fetchStockClips({ sportKeywords, techKeywords, fallbackKeyword, tempDir });
 
     const targetDuration = narrationDuration + 1.0;
     const perClip = targetDuration / clipPaths.length;
@@ -458,5 +523,5 @@ if (require.main === module) {
 module.exports = {
   buildVideo, hasFfmpeg, generateNarrationScript, synthesizeNarration,
   fetchStockClips, getDurationSec, runFfmpeg, escapeDrawtext, escapeFilterPath,
-  buildCaptionCues,
+  buildCaptionCues, enforceSportWordInKeywords,
 };
