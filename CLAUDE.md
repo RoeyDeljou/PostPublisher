@@ -93,6 +93,10 @@ CREATE TABLE IF NOT EXISTS token_log (
 - `LINKEDIN_CLIENT_SECRET` — LinkedIn app client secret
 - `LINKEDIN_TOKEN_EXPIRES_AT` — ISO8601 expiry datetime
 - `GITHUB_TOKEN` — (optional) for dashboard write-back via GitHub API
+- `OPENAI_API_KEY` — OpenAI key for gpt-image-2 background images
+- `PEXELS_API_KEY` — free Pexels API key, stock footage for narrated videos
+- `PIXABAY_API_KEY` — (optional) free Pixabay API key, fallback stock footage source
+- `NARRATION_VOICE` — (optional) Edge neural voice name for video narration, defaults to `en-US-GuyNeural`
 
 ## File Layout
 ```

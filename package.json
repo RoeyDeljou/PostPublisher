@@ -13,6 +13,7 @@
     "dashboard": "npx serve . --listen 3001"
   },
   "dependencies": {
+    "@andresaya/edge-tts": "^1.8.0",
     "@anthropic-ai/sdk": "^0.52.0",
     "@napi-rs/canvas": "^0.1.68"
   },

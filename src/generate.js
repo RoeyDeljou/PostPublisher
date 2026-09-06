@@ -32,17 +32,17 @@ function getArg(flag) {
   return i !== -1 ? process.argv[i + 1] : null;
 }
 
-// Fresh-generation asset: occasionally (1-in-5, via rotation.js) a short video
-// instead of the usual static image, using the exact same rules (sport/topic
-// rotation already applied to the prompt, no fabricated headline text, etc.).
+// Fresh-generation asset: occasionally (1-in-3, via rotation.js) a short narrated
+// video instead of the usual static image, using the exact same rules (sport/topic
+// rotation already applied to the prompt, no fabricated claims, etc.).
 // Falls back to the image on any video failure so this can never break a run.
-async function buildAsset({ prompt, headline, engagementText, baseName, notes }) {
-  if (nextAssetIsVideo(5)) {
+async function buildAsset({ prompt, headline, engagementText, angle, body, baseName, notes }) {
+  if (nextAssetIsVideo(3)) {
     if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
     try {
-      console.log('[generate] Building short video instead of a static image this time...');
+      console.log('[generate] Building narrated video instead of a static image this time...');
       const videoPath = await buildVideo({
-        prompt, headline, engagementText, notes,
+        prompt, headline, angle, body, notes,
         outputPath: path.join(VIDEOS_DIR, `${baseName}.mp4`),
       });
       return { imagePath: null, videoPath };
@@ -88,6 +88,8 @@ async function main() {
         prompt: content.imagePrompt,
         headline: content.headlineText,
         engagementText: content.imageEngagementText,
+        angle: content.angle,
+        body: content.body,
         baseName: `post_${postId}_regen_${Date.now()}`,
         notes,
       });
@@ -219,6 +221,8 @@ async function main() {
       prompt: content.imagePrompt,
       headline: content.headlineText,
       engagementText: content.imageEngagementText,
+      angle: content.angle,
+      body: content.body,
       baseName: `post_${postId}_${Date.now()}`,
     }));
     console.log(`[generate] Asset ready: ${videoPath || imagePath}`);

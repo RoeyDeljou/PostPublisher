@@ -513,10 +513,10 @@ function renderPendingPanel(){
     </div>
     <div class="preview-layout">
       <div>
-        <div class="preview-image-wrap" id="preview-img-wrap">
+        <div class="preview-image-wrap" id="preview-img-wrap" style="${isVideo ? 'aspect-ratio:4/5' : ''}">
           ${imgSrc
             ? (isVideo
-                ? `<video src="${esc(imgSrc)}" id="preview-img" controls muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>`
+                ? `<video src="${esc(imgSrc)}" id="preview-img" controls loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>`
                 : `<img src="${esc(imgSrc)}" alt="Post image" id="preview-img" />`)
             : `<div class="img-placeholder">Image generating…<br>Refresh after the workflow completes.</div>`}
         </div>
@@ -880,7 +880,7 @@ function openPostModal(postId) {
       </div>
       <button class="btn btn-ghost btn-sm" onclick="closePostModal()">✕ Close</button>
     </div>
-    ${imgSrc ? `<div class="preview-image-wrap" style="border-radius:8px;margin-bottom:1rem">${isVideo ? `<video src="${esc(imgSrc)}" controls muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>` : `<img src="${esc(imgSrc)}" alt="Post image" />`}</div>` : ''}
+    ${imgSrc ? `<div class="preview-image-wrap" style="border-radius:8px;margin-bottom:1rem${isVideo ? ';aspect-ratio:4/5' : ''}">${isVideo ? `<video src="${esc(imgSrc)}" controls loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>` : `<img src="${esc(imgSrc)}" alt="Post image" />`}</div>` : ''}
     <div class="card" style="margin-bottom:1rem">
       <div class="card-label">Post text</div>
       <div style="white-space:pre-wrap;font-size:.9rem;line-height:1.55">${esc(post.body || '—')}</div>
@@ -932,7 +932,7 @@ function renderGalleryDraft() {
     <div class="card" style="margin-bottom:1.5rem;border:2px solid var(--accent)">
       <div style="display:flex;gap:1.25rem;flex-wrap:wrap">
         <div style="width:200px;flex-shrink:0">
-          <div class="preview-image-wrap" style="border-radius:8px;aspect-ratio:1;cursor:pointer" onclick="openPostModal(${post.id})">
+          <div class="preview-image-wrap" style="border-radius:8px;aspect-ratio:${isVideo ? '4/5' : '1'};cursor:pointer" onclick="openPostModal(${post.id})">
             ${imgSrc
               ? (isVideo
                   ? `<video src="${esc(imgSrc)}" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>`
@@ -996,10 +996,10 @@ function renderGallery() {
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleGallerySelect(${r.id}, this.checked)" style="width:18px;height:18px;cursor:pointer" />
       </label>` : ''}
       ${isVideo ? `<span style="position:absolute;top:.5rem;right:.5rem;z-index:2;background:rgba(5,15,35,.7);color:#fff;border-radius:6px;padding:.2rem .5rem;font-size:.7rem">🎬 video</span>` : ''}
-      <div class="gc-img">
+      <div class="gc-img" style="${isVideo ? 'aspect-ratio:4/5' : ''}">
         ${src
           ? (isVideo
-              ? `<video src="${esc(src)}" autoplay muted loop playsinline></video>`
+              ? `<video src="${esc(src)}" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>`
               : `<img src="${esc(src)}" alt="${esc(angle)}" loading="lazy" />`)
           : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:.8rem">No image</div>`}
       </div>
