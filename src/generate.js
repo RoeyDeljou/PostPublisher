@@ -32,12 +32,18 @@ function getArg(flag) {
   return i !== -1 ? process.argv[i + 1] : null;
 }
 
+// Paused while the content style is reworked toward provocative/clickbait
+// photo+headline posts (2026-09-07) - re-enable by flipping this back to true
+// once video style direction is decided. The video pipeline itself (src/video.js)
+// is untouched, just not being invoked for fresh generation right now.
+const VIDEO_GENERATION_ENABLED = false;
+
 // Fresh-generation asset: occasionally (1-in-3, via rotation.js) a short narrated
 // video instead of the usual static image, using the exact same rules (sport/topic
 // rotation already applied to the prompt, no fabricated claims, etc.).
 // Falls back to the image on any video failure so this can never break a run.
 async function buildAsset({ prompt, headline, engagementText, angle, body, baseName, notes }) {
-  if (nextAssetIsVideo(3)) {
+  if (VIDEO_GENERATION_ENABLED && nextAssetIsVideo(3)) {
     if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
     try {
       console.log('[generate] Building narrated video instead of a static image this time...');
