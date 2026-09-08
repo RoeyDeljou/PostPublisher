@@ -16,9 +16,10 @@ function readState() {
       sportIndex: Number.isInteger(raw.sportIndex) ? raw.sportIndex : (Number.isInteger(raw.index) ? raw.index : 0),
       topicIndex: Number.isInteger(raw.topicIndex) ? raw.topicIndex : 0,
       assetIndex: Number.isInteger(raw.assetIndex) ? raw.assetIndex : 0,
+      treatmentIndex: Number.isInteger(raw.treatmentIndex) ? raw.treatmentIndex : 0,
     };
   } catch {
-    return { sportIndex: 0, topicIndex: 0, assetIndex: 0 };
+    return { sportIndex: 0, topicIndex: 0, assetIndex: 0, treatmentIndex: 0 };
   }
 }
 
@@ -44,6 +45,16 @@ function nextTopic(topicPool) {
   return topicPool[index];
 }
 
+// Returns the next image visual treatment (e.g. bottom-bar / diagonal-ribbon /
+// top-block) and advances its persisted counter - keeps consecutive posts from
+// all looking like the same template with different words swapped in.
+function nextTreatment(treatmentPool) {
+  const state = readState();
+  const index = state.treatmentIndex % treatmentPool.length;
+  writeState({ ...state, treatmentIndex: (index + 1) % treatmentPool.length });
+  return treatmentPool[index];
+}
+
 // Returns true once every `everyN` calls (e.g. everyN=5 -> post 1,6,11,... use
 // video), and always advances the counter — used to make video an occasional
 // alternative to the static image rather than every single post.
@@ -55,10 +66,10 @@ function nextAssetIsVideo(everyN = 5) {
 }
 
 function resetRotation() {
-  writeState({ sportIndex: 0, topicIndex: 0, assetIndex: 0 });
+  writeState({ sportIndex: 0, topicIndex: 0, assetIndex: 0, treatmentIndex: 0 });
 }
 
-module.exports = { nextSport, nextTopic, nextAssetIsVideo, resetRotation };
+module.exports = { nextSport, nextTopic, nextAssetIsVideo, nextTreatment, resetRotation };
 
 if (require.main === module) {
   if (process.argv[2] === 'reset') {

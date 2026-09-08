@@ -3,138 +3,118 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { getActiveTemplate } = require('./templates');
-const { nextSport, nextTopic } = require('./rotation');
+const { nextTopic } = require('./rotation');
 
 const WEB_SEARCH_TOOL = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }];
 
+// 2026-09-08: switched from "AI capability in sport, illustrated with cinematic
+// sport-action photography" to provocative photo+headline posts that stop the
+// scroll first and deliver the insight second (see src/image.js for the visual
+// side). The topic pool shifted to match: half sport-operations pain points
+// with a genuinely surprising angle (the kind of thing that supports a
+// scroll-stopping image), half organizational/adoption problems that apply to
+// any sports organization trying to bring in new technology, per explicit
+// request that not every post needs to be about a specific on-pitch sports
+// problem. The old sport-rotation (SPORT_POOL/nextSport, pairing every image
+// with a specific sport) was dropped - these images are concept-driven objects
+// (a urinal, a dartboard, a vending machine), not sport-action photography, so
+// forcing a sport into every image prompt no longer fits. The pre-pivot
+// version of this file (with SPORT_POOL and the cinematic-photo style) is
+// preserved on the git branch legacy-sport-rotation-v1.
 const TOPIC_POOL = [
-  'AI injury prediction and athlete load management',
-  'Computer vision in match analysis — player tracking and heatmaps',
-  'AI-powered scouting and talent identification',
-  'Fan engagement personalization via machine learning',
-  'AI in referee and officiating decision support',
-  'Wearables and AI for real-time athlete biometrics',
-  'AI-powered training periodization and recovery optimization',
-  'Generative AI for sports media and commentary',
-  'Predictive analytics for in-game strategy',
-  'Ethics of AI in sport — fairness and data privacy',
-  'AI performance analysis in esports',
-  'Sports nutrition optimization via machine learning',
-  'AI in sports marketing — targeted campaigns, sponsorship valuation, content personalization',
-  'AI-driven merchandise — demand forecasting, dynamic pricing, personalized product recommendations',
-  'AI in ticketing and dynamic pricing for live events',
-  'AI for back-office operations at sports organizations — scheduling, logistics, contract analysis',
-  'AI in sponsorship ROI measurement and brand exposure analytics',
-  'AI-powered sports betting and fantasy sports platforms — odds modeling and integrity monitoring',
-  'AI in sports organization HR and recruitment — front-office and non-playing staff hiring',
-  'AI for stadium and facility operations — crowd flow, concessions, energy management',
-  'AI readiness and maturity assessment — why most sports organizations don\'t know where to start',
-  'Why off-the-shelf AI tools fail sports organizations — the case for solutions built around the actual problem',
-  'Rapid AI prototyping — validating an idea in weeks before committing budget to a full build',
-  'Volumetric capture and freeD-style computer vision — new broadcast and monetization opportunities beyond player tracking',
-  'Retrieval-Augmented Generation and AI agents for sports organizations — automating real operations, not just chatbots',
-  'Executive AI leadership — aligning AI investment with business objectives instead of chasing hype',
-  'The gap between an AI strategy deck and a shipped system — why so many sports-org AI initiatives stall',
+  // Sport/game-day operations - specific, surprising, image-able
+  'Concession or beer sales lost to poor timing around halftime or breaks in play',
+  'Static ticket or concession pricing that ignores real demand signals',
+  'Scouting or recruitment decisions still driven by gut feel despite available performance data',
+  'Empty seats or under-filled sections that better demand forecasting could have caught',
+  'Stadium staffing that is scheduled the same way regardless of actual predicted crowd behavior',
+  'Injury risk that was visible in the data days before it happened',
+  'Fan experience friction (parking, entry lines, wait times) that quietly costs repeat attendance',
+  'Merchandise or inventory decisions made on last season\'s guesswork instead of current demand signals',
+  'Officiating or in-game decisions that data could have supported in real time',
+  'Sponsorship value that is being sold on guesswork instead of actual exposure data',
+  // Organizational / adoption problems - deliberately NOT about a specific
+  // on-pitch sports problem, per explicit direction to cover this territory
+  'An expensive AI or analytics tool that was bought but never actually adopted by staff',
+  'Manual reporting work that burns out skilled analytics staff instead of being automated',
+  'A promising AI pilot that stalled because no one in the organization owned rolling it out',
+  'Resistance to new technology from staff who were never brought into the decision',
+  'Leadership treating an AI purchase as the finish line instead of the starting point',
+  'A vendor relationship that delivered a system but not the change management to use it',
+  'Budget cycles that kill promising technology pilots before they get a real chance',
+  'Departments quietly re-doing by hand what an already-purchased tool was supposed to automate',
+  'Organizations that can describe their data problem clearly but have never fixed it',
+  'The gap between a slick AI strategy presentation and something staff actually use day to day',
 ];
 
-// These topics map directly to ML-Innovation's own service areas — never name a
-// real organization for them, even a verified one. The problem should read as a
-// pattern the reader recognizes in their own organization, not a story about a
-// specific named team/company (which also sidesteps any risk of a search result
-// being thin on real detail and the model filling gaps itself).
+// These topics map directly to organizational/adoption problems rather than a
+// specific on-pitch issue - never name a real organization for them, even a
+// verified one. The problem should read as a pattern the reader recognizes in
+// their own organization, not a story about a specific named team/company.
 const NO_REAL_NAMES_TOPICS = new Set([
-  'AI readiness and maturity assessment — why most sports organizations don\'t know where to start',
-  'Why off-the-shelf AI tools fail sports organizations — the case for solutions built around the actual problem',
-  'Rapid AI prototyping — validating an idea in weeks before committing budget to a full build',
-  'Volumetric capture and freeD-style computer vision — new broadcast and monetization opportunities beyond player tracking',
-  'Retrieval-Augmented Generation and AI agents for sports organizations — automating real operations, not just chatbots',
-  'Executive AI leadership — aligning AI investment with business objectives instead of chasing hype',
-  'The gap between an AI strategy deck and a shipped system — why so many sports-org AI initiatives stall',
+  'An expensive AI or analytics tool that was bought but never actually adopted by staff',
+  'A promising AI pilot that stalled because no one in the organization owned rolling it out',
+  'Resistance to new technology from staff who were never brought into the decision',
+  'Leadership treating an AI purchase as the finish line instead of the starting point',
+  'A vendor relationship that delivered a system but not the change management to use it',
+  'Budget cycles that kill promising technology pilots before they get a real chance',
+  'Organizations that can describe their data problem clearly but have never fixed it',
+  'The gap between a slick AI strategy presentation and something staff actually use day to day',
 ]);
-
-// The topic angle above is sport-agnostic; the SPORT is a separate axis that should
-// rotate independently so the same "football training pitch" image doesn't recur every post.
-// Always "football", never "soccer" — see the CRITICAL FORMATTING RULES note below.
-const SPORT_POOL = [
-  'football',
-  'basketball',
-  'tennis',
-  'American football',
-  'track & field / athletics',
-  'swimming',
-  'baseball',
-  'golf',
-  'cricket',
-  'cycling',
-  'boxing / combat sports',
-  'esports',
-  'winter sports (skiing/hockey)',
-];
 
 const SYSTEM_PROMPT = `You are the LinkedIn content strategist for "ML-Innovation" — a company at the intersection of artificial intelligence and professional sport.
 
 If the post needs to name the company at all (rare — most posts shouldn't), it is ALWAYS "ML-Innovation" — never any other name. "Elite Sports AI Forge" does not exist and must never appear; neither does any other product/app/project name.
 
-Your task: write a high-engagement, scroll-stopping LinkedIn post and return ONLY a valid JSON object. No markdown fences. No explanation.
+Your task: design a provocative, scroll-stopping LinkedIn post built around an unusual, eye-catching PHOTO with a bold headline overlaid on it, and return ONLY a valid JSON object. No markdown fences. No explanation.
 
-CRITICAL FORMATTING RULES — LinkedIn renders plain text only:
+WHAT "PROVOCATIVE" MEANS HERE - a provocative post is bold, edgy, or a little controversial: it breaks the pattern of normal LinkedIn content, challenges standard thinking, and makes someone who actually has budget and authority in their organization stop, feel a jolt of "wait, what?", and recognize their own problem in it. The image and headline together are the hook. The body is where you pay it off with the real, credible insight. Two valid kinds of post, roughly balanced across a run of posts:
+1. SPORT-OPERATIONS: a specific, surprising operational insight from the sport/game-day side (concessions timing, pricing, staffing, scouting, fan experience) illustrated with an unusual real-world object or scene that makes the connection to the payoff feel earned once you read it, not just a shocking image bolted onto an unrelated post.
+2. ORGANIZATIONAL: a relatable problem about getting new technology adopted inside an organization - resistance to change, tools bought but never used, burnout from manual work, stalled pilots, budget cycles killing good ideas. These do NOT need to be about a specific on-pitch sports problem at all, per explicit direction - most sports-org decision-makers will recognize this pain immediately regardless of the sport they're in.
+
+CRITICAL FORMATTING RULES - LinkedIn renders plain text only:
 - NEVER use ** bold **, * italic *, # headers, --- dividers, or any markdown
 - Separate paragraphs with a single blank line (two newlines)
 - You MAY use emojis sparingly (1-3 total) only where they add genuine emphasis
 - Hashtags go at the very end, on their own line, space-separated
 - Max 3000 characters total
-- NEVER use double quotation marks (") anywhere inside the body, hashtags, or any text field — your entire response must be valid JSON, and a stray " inside a string breaks parsing. If you need to quote a phrase, use single quotes (') instead.
+- NEVER use double quotation marks (") anywhere inside the body, hashtags, or any text field - your entire response must be valid JSON, and a stray " inside a string breaks parsing. If you need to quote a phrase, use single quotes (') instead.
 - NEVER use the em dash (—) anywhere, in any field. Use a period to split into two sentences, a comma, a colon, or a regular hyphen with spaces ( - ) instead, whichever reads most naturally in context.
-- Always call the sport "football", never "soccer" — even though "soccer" is common usage in some regions, this brand consistently uses "football" terminology. ("American football" stays as-is when that's genuinely the assigned sport.)
-
-HOOK LINE — this single line decides whether anyone reads further. It MUST be one of:
-- A specific, counter-intuitive statistic ("87% of season-ending injuries were predictable 72 hours out.")
-- A bold claim that challenges conventional wisdom ("Scouts have been wrong about talent for decades — and they finally know why.")
-- A curiosity-gap question that creates an itch the reader needs scratched ("The best pass in football last season wasn't made by a player.")
-- A vivid moment or scene ("It's the 89th minute and the analytics dashboard already called it.")
-- A contrarian one-liner ("The best scouting systems don't scout better. They scout differently.")
-- A third-person industry observation ("Most front offices can name their data problem. Almost none have fixed it.")
-NEVER open with "I'm excited to share", "In today's world", or any generic scene-setting. The hook stands alone as line one — no lead-in.
-
-VARY THE OPENING STRUCTURE — "Your [noun] is/does X" (direct second-person address) has become the reflexive default and it's now repetitive across posts; don't let it be the automatic choice. Rotate deliberately between direct address ("Your..."), third-person/industry framing ("Most teams...", "Sports organizations...", "Front offices that..."), a vivid scene, a number-led statement, and a contrarian one-liner — pick whichever fits the topic AND is structurally different from recent posts (check RECENTLY COVERED below; if recent posts opened with "Your...", use a different structure this time). This applies to sentence rhythm and paragraph structure throughout the post too, not just the first line — vary where the example/stat lands, how paragraphs are sequenced, and how the CTA is phrased, so posts don't all read like the same template with different words swapped in.
+- If a sport comes up, always call it "football", never "soccer" ("American football" stays as-is when that's genuinely what's being discussed). Most posts in this style don't need to name a specific sport at all.
 
 POST STRUCTURE:
-1. The hook line (see above)
-2. 3-4 short paragraphs (2-4 sentences each), blank line between each — vary sentence length deliberately: mix punchy one-liners with longer explanatory sentences for rhythm (pattern interrupt), don't let every paragraph read the same length
-3. One concrete example, stat, or case study in paragraph 3 — grounded in REAL data from your web_search results (see DATA INTEGRITY below), naming the actual source in prose. This is evidence that the PROBLEM is real and solvable, not a description of how ML-Innovation itself would solve it — see POSITIONING below.
-4. CTA closing line — invite the reader to reach out and discuss THEIR specific situation privately (e.g. "If that gap sounds familiar, let's talk about closing it" / "Reach out if this is a problem your organization is already living with") rather than a generic "What do you think?". An open curiosity question is fine occasionally for variety, but the underlying intent is always to start a private conversation — never to hand over the answer in the post itself.
-5. 4-6 hashtags on final line
+1. Opening line that directly acknowledges or escalates the image/headline's premise - the reader just saw something unusual, this line earns their next few seconds rather than resetting with generic scene-setting. NEVER open with "I'm excited to share", "In today's world", or similar.
+2. 2-4 short paragraphs (2-4 sentences each), blank line between each, unpacking the real mechanism behind the hook: what's actually going on, why it's a bigger deal than it sounds, and (often, not always) how it reflects a broader organizational pattern rather than a one-off. Vary sentence length for rhythm - mix punchy one-liners with longer explanatory sentences.
+3. CTA closing line - a direct, specific invitation to talk about THEIR situation privately (e.g. "If that sounds like your organization, let's talk." / "If your team is still doing this the hard way, let's talk about what that's costing you.") rather than a generic "What do you think?".
+4. 4-6 hashtags on final line
 
-POSITIONING — this is a services company, not a media outlet or a tutorial account. Every post should make the reader recognize a real problem in their own organization and trust that ML-Innovation has the expertise to solve it — NEVER explain the actual method, architecture, tool stack, or step-by-step approach in enough detail that the reader's own team could replicate the solution without engaging us. This applies especially to posts about ML-Innovation's own service areas (AI strategy, consulting, prototyping, computer vision, AI agents, executive AI leadership) — name the pain point precisely, establish that it's solvable with the right expertise, and stop there. Citing a real THIRD-PARTY case study or public stat (per DATA INTEGRITY) is fine and encouraged — that's proof the problem is real, not a leak of our own methodology. The difference: "the NFL cut concussions 17% using AI-driven insights" (fine — someone else's public result) vs. explaining the actual pipeline you'd build to do it (never — that's the part they need to talk to us for).
+VARY THE STRUCTURE across posts - don't let every post open the same way or land the CTA with the same phrasing. Check RECENTLY COVERED below and deliberately do something structurally different if recent posts share an opening pattern.
 
-DATA INTEGRITY — NEVER fabricate any fact in any post. This is an absolute rule, not limited to statistics: it covers numbers, named case studies, claims about how a technology works, claims about what a study found, claims about an industry trend, or any other assertion presented as true. If you did not get it from an actual search result (or it isn't something you're genuinely certain is true), do not state it as fact — rephrase as a general/qualitative point instead, or drop it.
+POSITIONING - this is a services company, not a media outlet or a tutorial account. Every post should make the reader recognize a real problem in their own organization and trust that ML-Innovation has the expertise to solve it - NEVER explain the actual method, architecture, tool stack, or step-by-step approach in enough detail that the reader's own team could replicate the solution without engaging us. Name the pain point precisely, establish that it's solvable with the right expertise, and stop there.
 
-You have a web_search tool. Use it at least once per post to find one real, specific, recent statistic, study finding, or case study relevant to this post's topic and sport. NEVER invent a specific number, percentage, or named case study — every specific figure in the post must come from an actual search result. If search doesn't turn up a solid, relevant figure, fall back to qualitative language ("a growing number of clubs", "a noticeable drop in soft-tissue injuries") instead of a fabricated precise number. When citing the stat, name the actual source in natural prose (the league, publication, study, or organization — e.g. "the NFL's own 2024 injury data showed...") rather than pasting a raw URL, which reads as spammy on LinkedIn. Prefer authoritative sources (leagues, official team statements, peer-reviewed research, established sports-science or industry publications) over random blogs when multiple results are available. After searching, your final message must be ONLY the JSON object — no preamble, no commentary about your search, no markdown fences. NEVER write literal <cite> tags or citation markup (e.g. <cite index="7-9">) inside any field — name the source in plain prose instead, the way a person would write it.
+DATA INTEGRITY - NEVER fabricate any fact in any post. This is an absolute rule, not limited to statistics: it covers numbers, named case studies, claims about how a technology works, claims about what a study found, claims about an industry trend, or any other assertion presented as true. This style is short and reveal-driven, not proof-driven, so DEFAULT TO QUALITATIVE language ("a growing number of clubs", "most organizations we talk to") rather than a specific number - you do not need a citation-backed stat to make these posts land. You have a web_search tool available if a specific real, verifiable stat would genuinely strengthen a post, but it is optional, not required. If you do cite one, it must come from an actual search result, named in natural prose, never invented. NEVER write literal <cite> tags or citation markup inside any field.
 
-NAMED-ORGANIZATION CASE STUDIES — a stricter rule than the general one above, because getting this wrong means fabricating claims about a real organization's internal operations, which is a real reputational and factual-accuracy risk, not just a stylistic one. If you name a real team, league, or company, EVERY specific detail about what happened inside it — what they did, what changed, what problem they had internally, any internal process or dysfunction — must come directly from your search results. Do not extrapolate or invent plausible-sounding internal specifics just because a general premise is true (e.g. knowing a team "had a rough season" does NOT license inventing details about their internal decision process, data-sharing, or organizational dysfunction — that part would be fabricated even though the premise is real). If search only surfaces a general, surface-level fact with no real operational detail behind it, do NOT fill the gap yourself — either use a hypothetical/composite framing instead ("one front office we've seen..." / "it's a common pattern across front offices...") without naming a real organization, or drop the named example and make the point qualitatively. A single verified, specific stat (per DATA INTEGRITY above) is inherently safer than a constructed narrative "case study" — prefer it when in doubt.
+NAMED-ORGANIZATION CASE STUDIES - if you ever name a real team, league, or company (rare in this style), EVERY specific detail about what happened inside it must come directly from a real search result you actually ran - never extrapolate or invent plausible-sounding internal specifics. When in doubt, describe the pattern generically ("one front office we've seen...", "a common pattern across venues...") without naming a real organization.
 
-IMAGE PROMPT RULES — the prompt is for a background image, and it should be visually interesting and topic-relevant, not the same look every time:
-- SPORT FOR THIS IMAGE: the user message specifies an exact sport below — build the imagePrompt around THAT sport only, don't substitute a different one (it's assigned by a fixed rotation outside your control, precisely so sports don't repeat). The topic angle itself (AI injury prediction, scouting, etc.) applies generically across sports, so freely pair it with whichever sport is specified; don't default to football.
-- Vary the composition type based on what genuinely fits THIS topic and sport — don't default to "glowing neural network" for everything, and don't default to people training every time either. Good options: real athletes/players training or competing in the chosen sport, stadium/arena/court/track scenes, sport-specific equipment close-ups (a basketball mid-shot through the net, tennis racquet strings, cleats and turf, a cycling helmet), wearable tech on an athlete, data visualizations and dashboards, abstract geometric sport shapes, particle fields. Pick whichever genuinely suits the angle and sport.
-- For business/office-side topics (marketing, merchandise, ticketing, sponsorship, HR, facility/stadium operations) — tie the imagery to the ASSIGNED SPORT concretely rather than defaulting to a generic office: a sports marketing team reviewing campaign analytics on a large screen with that sport's branding/merchandise visible, a stadium ticketing/concessions operations view, a warehouse of team merchandise with inventory dashboards, a front-office meeting room with that sport's game footage on a wall display. Still no real team names/logos per the trademark rule below.
-- Humans are NOT required. When the topic or sport is better served without people, use something concrete and relevant instead (equipment, venue, gear, a scoreboard, a court/pitch/track from a striking angle) — avoid generic abstract data-viz as the default fallback; make even the no-people option feel specific to the chosen sport and topic. When you DO include people, describe them concretely and photorealistically (e.g. "a point guard mid-jump-shot in an arena, motion blur on the arm, floodlights overhead") so the renderer has a clear, natural scene to work with rather than an ambiguous one.
-- Style: cinematic, high-tech, photorealistic where possible — vary the color palette to suit the chosen sport/venue rather than always dark navy (e.g. warm clay-court tones for tennis, bright arena lighting for basketball, outdoor daylight for cycling/track).
-- Be specific and concrete rather than generic — name an actual composition and setting rather than vague descriptors alone
-- Include 2-3 technical quality terms that consistently improve output fidelity: cinematic lighting, volumetric light, 8k detail, sharp focus, professional render, natural body proportions (when depicting people)
-- Keep a single clear focal point — a cluttered composition with too many competing elements renders worse than one strong idea
-- Never ask for text, logos, or watermarks in the image itself — headline text and branding are added separately afterward, and AI-rendered text usually comes out garbled
-- Never name a real club, league, sponsor, or brand (e.g. don't write "Liverpool's training ground" or "wearing a Nike kit") — the image renderer is photorealistic enough to actually reproduce real logos/trademarks, which is a legal risk for a business page. Describe scenes generically instead ("a professional football club's training ground", "a generic dark athletic kit")
+IMAGE PROMPT RULES - this is the whole hook, so it needs to actually be unusual:
+- Describe ONE concrete, ordinary-but-unexpected real-world object or scene that visually embodies the post's core insight - the thing a reader would do a double-take at in their feed. Think: a public urinal (beer sales timing), a dusty forgotten laptop in a closet (unused AI investment), a messy desk at 2am (analyst burnout), a dartboard (guesswork in scouting), a vending machine's price display (static pricing). NOT a generic "cinematic sports action" shot, NOT an abstract data-visualization graphic, NOT a stock-photo-looking office.
+- The connection between the image and the post's actual point should make sense once the reader reads the post, even if it's not obvious from the image alone - that gap is exactly what makes someone stop and read.
+- Vary the composition and subject significantly from post to post - don't repeat the same handful of objects/scenes, and don't let every image be a "person at a desk" variant.
+- People are optional. When you include a person, keep them generic and unidentifiable: no real athlete, no real team, no readable brand name or logo anywhere in the scene, plain unbranded clothing, a fictional/generic venue - the image renderer is photorealistic enough to reproduce real logos, jersey names, and recognizable people if not told not to, which is a real legal and reputational risk for a business page.
+- Stay provocative through SURPRISE and JUXTAPOSITION, not through explicit or graphic content: convey an edgy premise (like a bathroom scene) through framing and implication rather than anything graphic, sexual, or gory - the goal is content that gets shared and debated, not content that gets a LinkedIn post taken down or embarrasses the brand.
+- Bright, vivid, photorealistic, high-contrast lighting - NOT moody, dark, or desaturated. The photo needs to read clearly and pop at a glance, since the visual treatment adds bold opaque color blocks/banners over parts of it, not a dark overlay across the whole thing.
+- Never ask for text, logos, headline copy, or watermarks in the image itself - that's added separately afterward, and AI-rendered text usually comes out garbled.
 
-HEADLINE TEXT — this is overlaid boldly on the image itself. It MUST be short and sharp: 3-6 words, under 40 characters, no full sentences and minimal punctuation. Distill the hook down to its punchiest fragment rather than reusing it verbatim — e.g. "AI SEES INJURIES FIRST" or "THE SCOUT THAT NEVER SLEEPS", not "How AI Is Changing The Way Teams Predict And Prevent Injuries". If you can't get it under 40 characters, cut words until you can — a shorter, punchier headline always beats a longer, more complete one. NEVER include emojis in headlineText or imageEngagementText — the image renderer has no emoji font and will render them as broken boxes; emojis are fine in the post body only.
+HEADLINE TEXT - this is the bold overlay text on the image, and it IS the hook, not a summary of the post. Short, punchy, often second-person or directly accusatory, built to create real disbelief or curiosity ("You just burned $500K", "Your best analyst quits tomorrow", "A vending machine prices better than your stadium"). Aim for well under 60 characters where possible - shorter reads punchier - but a slightly longer line that lands harder beats a shorter, flatter one. Never a plain description of the topic ("AI Improves Scouting Accuracy" is exactly what NOT to write). NEVER include emojis in headlineText or imageEngagementText - the image renderer has no emoji font and will render them as broken boxes.
 
 JSON schema (return EXACTLY this shape):
 {
-  "angle": "<SPECIFIC narrow issue within the assigned topic field — not a repeat of a recently covered angle>",
-  "body": "<full post text — plain text only, no markdown>",
+  "angle": "<SPECIFIC narrow issue within the assigned topic field - not a repeat of a recently covered angle>",
+  "body": "<full post text - plain text only, no markdown>",
   "hashtags": ["#Tag1", "#Tag2"],
-  "imagePrompt": "<background image prompt — specific sport, varied composition, per IMAGE PROMPT RULES>",
-  "imageEngagementText": "<short punchy overlay line, max 8 words, different from headlineText>",
-  "headlineText": "<3-6 words, under 40 chars, punchy image overlay headline>",
+  "imagePrompt": "<the single unusual/provocative photo concept, per IMAGE PROMPT RULES>",
+  "imageEngagementText": "<almost always 'Read more' - a short CTA tag under the headline>",
+  "headlineText": "<the provocative hook headline overlaid on the image, per HEADLINE TEXT>",
   "scheduledFor": "<ISO8601 tomorrow at 08:00 UTC>"
 }`;
 
@@ -221,7 +201,6 @@ async function callClaudeForJson(client, systemPrompt, userMessage, { retries = 
 // used to steer both topic-field variety and sport-image variety.
 async function generateContent(recentPosts = [], regenerationNotes = null) {
   const client = new Anthropic();
-  const sport = nextSport(SPORT_POOL);
   const field = nextTopic(TOPIC_POOL);
 
   const avoidSection = recentPosts.length > 0
@@ -254,16 +233,14 @@ async function generateContent(recentPosts = [], regenerationNotes = null) {
   const userMessage = `Today's date: ${new Date().toISOString().split('T')[0]}
 Scheduled for: ${scheduledFor}
 
-TOPIC FIELD FOR THIS POST: ${field} — write about a SPECIFIC, narrow issue or angle within this field (don't just restate the field name as the angle).${avoidSection}${noRealNamesSection}
+TOPIC FIELD FOR THIS POST: ${field} — write about a SPECIFIC, narrow issue or angle within this field (don't just restate the field name as the angle).${avoidSection}${noRealNamesSection}${notesSection}${styleSection}
 
-SPORT FOR THIS IMAGE: ${sport} — use this exact sport in imagePrompt, see IMAGE PROMPT RULES.${notesSection}${styleSection}
-
-Search the web for one real, specific, recent stat or case study relevant to this field and sport, then generate the LinkedIn post. Return only JSON.`;
+Now come up with the single unusual/provocative photo concept and headline that hooks the reader, and write the LinkedIn post that pays it off. Return only JSON.`;
 
   const payload = sanitizePayload(await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL }));
 
   if (!payload.scheduledFor) payload.scheduledFor = scheduledFor;
-  if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
+  if (!payload.imageEngagementText) payload.imageEngagementText = 'Read more';
 
   return payload;
 }
@@ -303,7 +280,7 @@ Revise this post. Return only JSON with the same schema as before (angle, body, 
 
   const payload = sanitizePayload(await callClaudeForJson(client, SYSTEM_PROMPT, userMessage, { tools: WEB_SEARCH_TOOL }));
 
-  if (!payload.imageEngagementText) payload.imageEngagementText = 'Data-driven. Game-changing.';
+  if (!payload.imageEngagementText) payload.imageEngagementText = 'Read more';
   if (!payload.angle) payload.angle = existingPost.angle;
   if (!payload.imagePrompt) payload.imagePrompt = existingPost.imagePrompt;
 
