@@ -32,10 +32,11 @@ const BRAND = {
   font: HEAD_FONT,
 };
 
-// 2026-10: the previous treatments (opaque red/yellow bars, drop-shadowed
-// all-caps type, "READ MORE >" button) read as 1980s retail advertising. These
-// three keep the photo as the hero and put type directly on it, social-native.
-const TREATMENTS = ['caption', 'sticker', 'poster'];
+// 2026-10: the first treatments read as 1980s retail ads, the second set
+// (outlined meme type, tilted stickers, flash + grain) read as 1990s. These three
+// are current UI-style layouts: tight-tracked Inter, frosted glass, clean cards,
+// accent-colored key word, crisp photo with no grain.
+const TREATMENTS = ['editorial', 'glass', 'card'];
 
 // Every image gets a contact line by default - pass contactText: null to omit.
 const DEFAULT_CONTACT_TEXT = 'ml-innovate.com';
@@ -52,7 +53,7 @@ function fetchOpenAIBackground(prompt, outputPath) {
     const payload = JSON.stringify({
       model: 'gpt-image-2',
       prompt,
-      quality: 'low',
+      quality: 'medium',
       size: '1024x1024',
     });
 
@@ -178,6 +179,7 @@ function fitHeadline(ctx, text, { scale = 1, maxWidth, maxLines = 4, family = HE
   let lines;
   for (;;) {
     ctx.font = `${px}px "${family}"`;
+    ctx.letterSpacing = `${(-0.03 * px).toFixed(1)}px`;
     lines = wrapWords(ctx, words, maxWidth);
     if (lines.length <= maxLines || px <= 40) break;
     px = Math.round(px * 0.9);
@@ -225,6 +227,7 @@ function drawLabel(ctx, text, x, y, { size = 26, color = 'rgba(255,255,255,0.88)
 function drawLines(ctx, layout, x, firstBaseline, { lineHeight = 1.04, color = '#fff', marker = true, markerText = '#0B0B0B', tint = BRAND.accent, stroke = null }) {
   const { px, lines, highlight } = layout;
   ctx.font = `${px}px "${HEAD_FONT}"`;
+  ctx.letterSpacing = `${(-0.03 * px).toFixed(1)}px`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const space = ctx.measureText(' ').width;
@@ -263,94 +266,94 @@ function drawLines(ctx, layout, x, firstBaseline, { lineHeight = 1.04, color = '
     }
     y += px * lineHeight;
   }
+  ctx.letterSpacing = '0px';
 }
 
-// ── Treatment: caption - big sentence-case type bottom-left over a soft
-// gradient, one highlighted word. The photo stays the hero. ─────────────────
-async function renderCaption(ctx, size, bg, { headline, contactText }) {
-  if (bg) ctx.drawImage(bg, 0, 0, size, size);
-  applyGrain(ctx, size);
+// ── Treatment: editorial - sentence-case type top-left over a soft top scrim,
+// accent-colored key word, small "AI × SPORT" eyebrow pill. ──────────────────
+function drawPill(ctx, text, x, y, { size = 24, fill = 'rgba(255,255,255,0.16)', border = 'rgba(255,255,255,0.35)', color = '#fff' } = {}) {
+  ctx.font = `${size}px "${LABEL_FONT}"`;
+  ctx.letterSpacing = '1px';
+  const w = ctx.measureText(text).width + 40;
+  const h = size + 24;
+  ctx.fillStyle = fill;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 2); ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = border; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + 20, y + h / 2 + 1);
+  ctx.letterSpacing = '0px';
+  return w;
+}
 
-  const grad = ctx.createLinearGradient(0, size * 0.42, 0, size);
-  grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.82)');
+async function renderEditorial(ctx, size, bg, { headline, contactText }) {
+  if (bg) ctx.drawImage(bg, 0, 0, size, size);
+  const grad = ctx.createLinearGradient(0, 0, 0, size * 0.72);
+  grad.addColorStop(0, 'rgba(6,8,12,0.78)');
+  grad.addColorStop(0.6, 'rgba(6,8,12,0.34)');
+  grad.addColorStop(1, 'rgba(6,8,12,0)');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, size * 0.42, size, size * 0.58);
+  ctx.fillRect(0, 0, size, size * 0.72);
 
-  const layout = fitHeadline(ctx, stripEmoji(headline), { maxWidth: size - 132, maxLines: 4 });
-  const blockH = (layout.lines.length - 1) * layout.px * 1.04;
-  const firstBaseline = size - 112 - blockH;
-  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 3;
-  drawLines(ctx, layout, 66, firstBaseline, { color: '#fff' });
-  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  drawPill(ctx, 'AI × SPORT', 64, 60);
+  const layout = fitHeadline(ctx, stripEmoji(headline), { scale: 1.0, maxWidth: size - 128, maxLines: 4 });
+  drawLines(ctx, layout, 64, 190 + layout.px * 0.8, { lineHeight: 1.02, color: '#fff', marker: false });
 
-  drawLabel(ctx, contactText, 66, size - 52, { size: 24, color: 'rgba(255,255,255,0.72)' });
-  await drawLogo(ctx, size - 28 - 60, 28, 60);
+  drawPill(ctx, stripEmoji(contactText || DEFAULT_CONTACT_TEXT), 64, size - 60 - 48, { size: 22 });
+  await drawLogo(ctx, size - 64 - 64, 56, 64);
 }
 
-// ── Treatment: sticker - the headline sits on a slightly tilted white note,
-// like a sticker slapped on the photo. The photo is untouched. ───────────────
-async function renderSticker(ctx, size, bg, { headline, contactText }) {
+// ── Treatment: glass - frosted-glass panel across the bottom, type on the
+// blurred photo. ─────────────────────────────────────────────────────────────
+async function renderGlass(ctx, size, bg, { headline, contactText }) {
   if (bg) ctx.drawImage(bg, 0, 0, size, size);
-  applyGrain(ctx, size);
+  const margin = 48;
+  const pad = 44;
+  const layout = fitHeadline(ctx, stripEmoji(headline), { scale: 0.86, maxWidth: size - margin * 2 - pad * 2, maxLines: 4 });
+  const textH = (layout.lines.length - 1) * layout.px * 1.04 + layout.px * 0.82;
+  const panelH = textH + pad * 2 + 58;
+  const x = margin, y = size - margin - panelH, w = size - margin * 2;
 
-  const pad = 40;
-  const layout = fitHeadline(ctx, stripEmoji(headline), { scale: 0.66, maxWidth: 640, maxLines: 5 });
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(x, y, w, panelH, 36); ctx.clip();
+  if (bg) {
+    try { ctx.filter = 'blur(28px)'; ctx.drawImage(bg, -60, -60, size + 120, size + 120); ctx.filter = 'none'; } catch { ctx.filter = 'none'; }
+  }
+  ctx.fillStyle = 'rgba(10,12,18,0.46)';
+  ctx.fillRect(x, y, w, panelH);
+  ctx.restore();
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+  ctx.beginPath(); ctx.roundRect(x, y, w, panelH, 36); ctx.stroke();
+
+  drawLines(ctx, layout, x + pad, y + pad + layout.px * 0.8, { lineHeight: 1.04, color: '#fff', marker: false });
+  drawLabel(ctx, contactText, x + pad, y + panelH - pad + 8, { size: 24, color: 'rgba(255,255,255,0.7)', shadow: false });
+  await drawLogo(ctx, size - margin - 64, margin, 64);
+}
+
+// ── Treatment: card - clean white rounded card, dark type, accent marker on
+// the key word. No tilt, no shadow tricks. ───────────────────────────────────
+async function renderCard(ctx, size, bg, { headline, contactText }) {
+  if (bg) ctx.drawImage(bg, 0, 0, size, size);
+  const pad = 46;
+  const layout = fitHeadline(ctx, stripEmoji(headline), { scale: 0.7, maxWidth: 700, maxLines: 5 });
   ctx.font = `${layout.px}px "${HEAD_FONT}"`;
+  ctx.letterSpacing = `${(-0.03 * layout.px).toFixed(1)}px`;
   const widest = Math.max(...layout.lines.map(line => ctx.measureText(line.map(t => t.w).join(' ')).width));
-  const w = widest + pad * 2;
-  const h = (layout.lines.length - 1) * layout.px * 1.08 + layout.px * 1.0 + pad * 2;
+  const w = widest + pad * 2 + 8;
+  const h = (layout.lines.length - 1) * layout.px * 1.06 + layout.px * 0.9 + pad * 2;
+  const x = 56, y = 64;
 
   ctx.save();
-  ctx.translate(70 + w / 2, 96 + h / 2);
-  ctx.rotate(-2.6 * Math.PI / 180);
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 12;
+  ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
   ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.roundRect(-w / 2, -h / 2, w, h, 22);
-  ctx.fill();
-  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-  drawLines(ctx, layout, -w / 2 + pad, -h / 2 + pad + layout.px * 0.86, { lineHeight: 1.08, color: '#0B0B0B' });
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 34); ctx.fill();
   ctx.restore();
+  drawLines(ctx, layout, x + pad, y + pad + layout.px * 0.8, { lineHeight: 1.06, color: '#0B0B0B' });
 
-  // small black "price tag" sticker bottom-right
-  const tag = stripEmoji(contactText || 'ml-innovate.com');
-  ctx.font = `28px "${LABEL_FONT}"`;
-  const tw = ctx.measureText(tag).width + 44;
-  ctx.save();
-  ctx.translate(size - 60 - tw / 2, size - 74);
-  ctx.rotate(2.2 * Math.PI / 180);
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
-  ctx.fillStyle = '#0B0B0B';
-  ctx.beginPath();
-  ctx.roundRect(-tw / 2, -28, tw, 56, 28);
-  ctx.fill();
-  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(tag, 0, 2);
-  ctx.restore();
-
-  await drawLogo(ctx, size - 28 - 60, 28, 60);
+  drawPill(ctx, stripEmoji(contactText || DEFAULT_CONTACT_TEXT), 56, size - 56 - 48, { size: 22 });
+  await drawLogo(ctx, size - 56 - 64, size - 56 - 64, 64);
 }
 
-// ── Treatment: poster - huge lowercase type with a heavy outline straight on
-// the photo. Loud, unpolished, meme-adjacent. ────────────────────────────────
-async function renderPoster(ctx, size, bg, { headline, contactText }) {
-  if (bg) ctx.drawImage(bg, 0, 0, size, size);
-  applyGrain(ctx, size);
-  ctx.fillStyle = 'rgba(0,0,0,0.16)';
-  ctx.fillRect(0, 0, size, size);
-
-  const layout = fitHeadline(ctx, stripEmoji(headline).toLowerCase(), { scale: 1.12, maxWidth: size - 112, maxLines: 4 });
-  drawLines(ctx, layout, 56, 56 + layout.px * 0.92, { lineHeight: 0.98, color: '#fff', marker: false, stroke: Math.max(10, Math.round(layout.px * 0.14)) });
-
-  drawLabel(ctx, contactText, 56, size - 46, { size: 26, color: '#fff' });
-  await drawLogo(ctx, size - 28 - 60, size - 28 - 60, 60);
-}
-
-const RENDERERS = { caption: renderCaption, sticker: renderSticker, poster: renderPoster };
+const RENDERERS = { editorial: renderEditorial, glass: renderGlass, card: renderCard };
 
 async function buildImage({ prompt, headline, engagementText, contactText = DEFAULT_CONTACT_TEXT, outputPath, notes = null, treatment = null }) {
   ensureDir();
@@ -371,7 +374,7 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
   // edgy the concept is.
   const peopleWords = /\b(people|person|player|players|human|humans|athlete|athletes|man|woman|men|women|coach|worker|analyst|employee|scout)\b/i;
   const wantsPeople = peopleWords.test(notes || '') || peopleWords.test(prompt || '');
-  const styleSuffix = 'raw amateur smartphone photograph, harsh direct on-camera flash, slightly overexposed, visible film grain, imperfect off-center framing, candid snapshot, mundane and a little uncanny, not a stock photo, not studio lighting, not cinematic, not an illustration';
+  const styleSuffix = 'crisp ultra-sharp high-resolution contemporary photograph shot on a flagship 2026 smartphone, natural soft daylight or clean modern lighting, shallow depth of field, rich accurate colors, clean modern color grade, deadpan and slightly uncanny, no film grain, no flash, no vintage or retro look, no blur, no noise, not a stock photo, not an illustration';
   const safetySuffix = 'no real brand names or logos of any kind, no readable text or signage, no identifiable real person or public figure, generic fictional setting, no visible genitals or nudity';
   const safePrompt = wantsPeople
     ? `${prompt}, generic unbranded plain solid-color clothing (no polo shirts, no collar logos, no embroidered crests) and plain unmarked dark leather shoes or plain boots instead of sneakers, any held object (cups, bottles, phones) gripped firmly and physically supported by fingers wrapped around it, never floating (no swoosh, no stripes, no logos on any footwear), ${styleSuffix}, ${safetySuffix}`
@@ -389,7 +392,7 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
   }
 
   const chosen = treatment && RENDERERS[treatment] ? treatment : nextTreatment(TREATMENTS);
-  const renderer = RENDERERS[chosen] || renderCaption;
+  const renderer = RENDERERS[chosen] || renderEditorial;
 
   // bg is null when the OpenAI call failed - the gradient is already painted
   // and each renderer's `if (bg)` guard leaves it in place.
@@ -409,7 +412,7 @@ if (require.main === module) {
   const treatment = get('--treatment') || null;
   const output = get('--output') || path.join(IMAGES_DIR, `post_${Date.now()}.png`);
   if (!prompt || !headline) {
-    console.error('Usage: node src/image.js --prompt "..." --headline "..." [--contact "..."] [--treatment caption|sticker|poster] [--output path.png]');
+    console.error('Usage: node src/image.js --prompt "..." --headline "..." [--contact "..."] [--treatment editorial|glass|card] [--output path.png]');
     process.exit(1);
   }
   buildImage({ prompt, headline, contactText, treatment, outputPath: output })
