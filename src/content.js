@@ -271,12 +271,13 @@ function finalizePayload(payload) {
 // recentPosts: array of { angle, body } from the most recent posts (any status),
 // used to steer topic-field variety.
 // opts.topic    - use this topic instead of advancing the topic rotation
+// opts.voice / opts.closing ('talk'|'reflective') / opts.company (bool) - override rotation
 // opts.preview  - don't consume closing-style / company-mention rotation slots
 async function generateContent(recentPosts = [], regenerationNotes = null, opts = {}) {
   const client = new Anthropic();
   const field = opts.topic || nextTopic(TOPIC_POOL);
-  const closingStyle = nextClosingStyle(!opts.preview);
-  const nameCompany = nextCompanyMention(!opts.preview);
+  const closingStyle = opts.closing || nextClosingStyle(!opts.preview);
+  const nameCompany = typeof opts.company === 'boolean' ? opts.company : nextCompanyMention(!opts.preview);
   const voice = opts.voice || nextVoice(!opts.preview);
 
   const avoidSection = recentPosts.length > 0
@@ -394,10 +395,11 @@ if (require.main === module) {
   const preview = argv.includes('--preview');
   const ti = argv.indexOf('--topic');
   const topic = ti !== -1 ? argv[ti + 1] : null;
-  const positional = argv.filter((a, i) => !a.startsWith('--') && argv[i - 1] !== '--topic');
+  const flag = n => { const i = argv.indexOf(n); return i !== -1 ? argv[i + 1] : undefined; };
+  const positional = argv.filter((a, i) => !a.startsWith('--') && !['--topic', '--voice', '--closing', '--company'].includes(argv[i - 1]));
   const recentArg = positional[0] ? JSON.parse(positional[0]) : [];
   const notes = positional[1] || null;
-  generateContent(recentArg, notes, { preview, topic })
+  generateContent(recentArg, notes, { preview, topic, voice: flag('--voice'), closing: flag('--closing'), company: flag('--company') === undefined ? undefined : flag('--company') === 'yes' })
     .then(p => console.log(JSON.stringify(p, null, 2)))
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }
