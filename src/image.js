@@ -270,7 +270,7 @@ function drawLines(ctx, layout, x, firstBaseline, { lineHeight = 1.04, color = '
 }
 
 // ── Treatment: editorial - sentence-case type top-left over a soft top scrim,
-// accent-colored key word, small "AI × SPORT" eyebrow pill. ──────────────────
+// accent-colored key word. No eyebrow tag, the headline carries the post. ────
 function drawPill(ctx, text, x, y, { size = 24, fill = 'rgba(255,255,255,0.16)', border = 'rgba(255,255,255,0.35)', color = '#fff' } = {}) {
   ctx.font = `${size}px "${LABEL_FONT}"`;
   ctx.letterSpacing = '1px';
@@ -294,12 +294,11 @@ async function renderEditorial(ctx, size, bg, { headline, contactText }) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size * 0.72);
 
-  drawPill(ctx, 'AI × SPORT', 64, 60);
   const layout = fitHeadline(ctx, stripEmoji(headline), { scale: 1.0, maxWidth: size - 128, maxLines: 4 });
-  drawLines(ctx, layout, 64, 190 + layout.px * 0.8, { lineHeight: 1.02, color: '#fff', marker: false });
+  drawLines(ctx, layout, 64, 84 + layout.px * 0.8, { lineHeight: 1.02, color: '#fff', marker: false });
 
   drawPill(ctx, stripEmoji(contactText || DEFAULT_CONTACT_TEXT), 64, size - 60 - 48, { size: 22 });
-  await drawLogo(ctx, size - 64 - 64, 56, 64);
+  await drawLogo(ctx, size - 64 - 64, size - 60 - 64, 64);
 }
 
 // ── Treatment: glass - frosted-glass panel across the bottom, type on the
