@@ -5,61 +5,43 @@ const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const http = require('http');
 const { nextTreatment } = require('./rotation');
 
 const IMAGES_DIR = path.join(__dirname, '..', 'data', 'images');
 const LOGO_PATH = path.join(__dirname, '..', 'data', 'logo.png');
+const FONT_DIR = path.join(__dirname, '..', 'data', 'fonts');
 
-// The generic 'sans-serif' font family resolves to whatever's installed on the
-// machine — Arial/Segoe UI locally on Windows, some Linux default on GitHub's
-// ubuntu-latest runner — which don't render identically (numerals in particular
-// came out visibly smaller than letters at the same font-size in the system
-// font). Bundling our own font guarantees identical output everywhere.
-const FONT_PATH = path.join(__dirname, '..', 'data', 'fonts', 'ArchivoBlack-Regular.ttf');
-const FONT_FAMILY = 'Archivo Black';
-if (fs.existsSync(FONT_PATH)) GlobalFonts.registerFromPath(FONT_PATH, FONT_FAMILY);
+// Bundled fonts so output is identical on a Windows dev machine and GitHub's
+// Linux runners (system fonts differ). Inter ExtraBold/SemiBold (SIL OFL, see
+// data/fonts/Inter-OFL.txt) give the headline a current, native-social look;
+// Archivo Black stays registered as a fallback and for src/video.js.
+function registerFont(file, family) {
+  const p = path.join(FONT_DIR, file);
+  if (!fs.existsSync(p)) return null;
+  GlobalFonts.registerFromPath(p, family);
+  return family;
+}
+registerFont('ArchivoBlack-Regular.ttf', 'Archivo Black');
+const HEAD_FONT = registerFont('Inter-ExtraBold.otf', 'Inter XB') || 'Archivo Black';
+const LABEL_FONT = registerFont('Inter-SemiBold.otf', 'Inter SB') || HEAD_FONT;
 
 const BRAND = {
-  accent: '#00C896',
+  accent: '#D9FF3F',
   white: '#FFFFFF',
   size: 1080,
-  font: FONT_FAMILY,
+  font: HEAD_FONT,
 };
 
-const TREATMENTS = ['bottomBar', 'ribbon', 'topBlock'];
+// 2026-10: the previous treatments (opaque red/yellow bars, drop-shadowed
+// all-caps type, "READ MORE >" button) read as 1980s retail advertising. These
+// three keep the photo as the hero and put type directly on it, social-native.
+const TREATMENTS = ['caption', 'sticker', 'poster'];
 
-// Every image gets a contact CTA by default — pass contactText: null explicitly
-// to omit it (there's no current use case for omitting it, but the override
-// stays available rather than hardcoding it unconditionally).
-const DEFAULT_CONTACT_TEXT = 'DM or visit ml-innovate.com for inquiries';
+// Every image gets a contact line by default - pass contactText: null to omit.
+const DEFAULT_CONTACT_TEXT = 'ml-innovate.com';
 
 function ensureDir() {
   if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
-}
-
-function fetchUrl(url, dest) {
-  return new Promise((resolve, reject) => {
-    const proto = url.startsWith('https') ? https : http;
-    const file = fs.createWriteStream(dest);
-    proto.get(url, res => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        file.destroy();
-        fs.unlinkSync(dest);
-        return fetchUrl(res.headers.location, dest).then(resolve).catch(reject);
-      }
-      if (res.statusCode !== 200) {
-        file.destroy();
-        return reject(new Error(`HTTP ${res.statusCode} from ${url}`));
-      }
-      res.pipe(file);
-      file.on('finish', () => file.close(resolve));
-      file.on('error', reject);
-    }).on('error', err => {
-      try { fs.unlinkSync(dest); } catch {}
-      reject(err);
-    });
-  });
 }
 
 function fetchOpenAIBackground(prompt, outputPath) {
@@ -112,199 +94,263 @@ function fetchOpenAIBackground(prompt, outputPath) {
 function createGradientFallback(canvas, ctx) {
   const { width: w, height: h } = canvas;
   const grad = ctx.createLinearGradient(0, 0, w, h);
-  grad.addColorStop(0, '#050f23');
-  grad.addColorStop(0.45, '#0a2448');
-  grad.addColorStop(1, '#0A66C2');
+  grad.addColorStop(0, '#111418');
+  grad.addColorStop(1, '#2b3340');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
-
-  // subtle grid lines for tech feel
-  ctx.strokeStyle = 'rgba(0,200,150,0.08)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < w; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-  for (let y = 0; y < h; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
 }
 
-function measureAndWrap(ctx, text, maxWidth) {
-  const words = text.split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = test;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-// node-canvas has no bundled emoji font — emoji glyphs render as broken tofu
-// boxes, so strip them from anything drawn on the canvas (fine in the LinkedIn
-// post body, which renders via the browser/app's own emoji font instead).
+// node-canvas has no bundled emoji font - emoji glyphs render as tofu boxes, so
+// strip them from anything drawn on the canvas (fine in the LinkedIn post body).
 function stripEmoji(text) {
   return String(text || '').replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️]/gu, '').replace(/\s{2,}/g, ' ').trim();
 }
 
-function drawTextWithShadow(ctx, text, x, y, shadowColor = 'rgba(0,0,0,0.85)', blur = 14) {
-  ctx.shadowColor = shadowColor;
-  ctx.shadowBlur = blur;
-  ctx.shadowOffsetX = 2;
-  ctx.shadowOffsetY = 3;
-  ctx.fillText(text, x, y);
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+// Which word of the headline gets the marker highlight: a number/money token
+// if there is one (that's the punch), otherwise the longest word in the back
+// two thirds, otherwise the last word.
+function pickHighlight(words) {
+  const num = words.findIndex(w => /[\d$%£€]/.test(w));
+  if (num !== -1) return num;
+  let best = -1, len = 0;
+  words.forEach((w, i) => {
+    const clean = w.replace(/[^A-Za-z]/g, '');
+    if (i >= Math.floor(words.length / 3) && clean.length >= 6 && clean.length > len) { best = i; len = clean.length; }
+  });
+  return best !== -1 ? best : words.length - 1;
+}
+
+// Headlines may mark their own highlight with single asterisks:
+// "Your fans are *pissing* away your halftime sales". Returns plain words plus
+// the set of word indexes to highlight (empty set = none marked).
+function parseHeadline(text) {
+  const words = [];
+  const hl = new Set();
+  let inStar = false;
+  for (const tok of String(text).split(/\s+/).filter(Boolean)) {
+    if (tok.startsWith('*')) inStar = true;
+    const clean = tok.replace(/\*/g, '');
+    if (clean) {
+      words.push(clean);
+      if (inStar) hl.add(words.length - 1);
+    }
+    if (tok.endsWith('*')) inStar = false;
+  }
+  return { words, hl };
+}
+
+function baseFontPx(chars) {
+  if (chars <= 24) return 112;
+  if (chars <= 34) return 96;
+  if (chars <= 46) return 84;
+  if (chars <= 60) return 72;
+  return 62;
+}
+
+// Greedy word wrap that keeps each word's index so the highlight survives.
+function wrapWords(ctx, words, maxWidth) {
+  const lines = [];
+  let line = [];
+  let width = 0;
+  const space = ctx.measureText(' ').width;
+  words.forEach((w, i) => {
+    const ww = ctx.measureText(w).width;
+    const add = line.length ? space + ww : ww;
+    if (width + add > maxWidth && line.length) {
+      lines.push(line);
+      line = [{ w, i }];
+      width = ww;
+    } else {
+      line.push({ w, i });
+      width += add;
+    }
+  });
+  if (line.length) lines.push(line);
+  return lines;
+}
+
+// Pick the biggest font size (scaled) whose wrapped text fits in maxLines.
+function fitHeadline(ctx, text, { scale = 1, maxWidth, maxLines = 4, family = HEAD_FONT }) {
+  const { words, hl } = parseHeadline(text);
+  let px = Math.round(baseFontPx(words.join(' ').length) * scale);
+  let lines;
+  for (;;) {
+    ctx.font = `${px}px "${family}"`;
+    lines = wrapWords(ctx, words, maxWidth);
+    if (lines.length <= maxLines || px <= 40) break;
+    px = Math.round(px * 0.9);
+  }
+  return { px, lines, words, highlight: hl.size ? hl : new Set([pickHighlight(words)]) };
+}
+
+function applyGrain(ctx, size, amount = 16) {
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * amount;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
 }
 
 async function drawLogo(ctx, x, y, s) {
   if (!fs.existsSync(LOGO_PATH)) return;
   try {
     const logo = await loadImage(LOGO_PATH);
-    ctx.drawImage(logo, x, y, s, s);
-  } catch { /* branding is non-critical — skip on failure */ }
-}
-
-function drawContactFooter(ctx, size, contactText, opts = {}) {
-  if (!contactText) return;
-  const { color = 'rgba(255,255,255,0.9)', barColor = null } = opts;
-  ctx.font = `bold 22px "${BRAND.font}"`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  const text = stripEmoji(contactText);
-  if (barColor) {
-    const w = ctx.measureText(text).width;
-    ctx.fillStyle = barColor;
+    ctx.save();
     ctx.beginPath();
-    ctx.roundRect(size / 2 - w / 2 - 20, size - 26 - 26, w + 40, 40, 8);
-    ctx.fill();
-  }
-  ctx.fillStyle = color;
-  drawTextWithShadow(ctx, text, size / 2, size - 26, 'rgba(0,0,0,0.7)', 6);
+    ctx.roundRect(x, y, s, s, s * 0.22);
+    ctx.clip();
+    ctx.drawImage(logo, x, y, s, s);
+    ctx.restore();
+  } catch { /* branding is non-critical */ }
 }
 
-// ── Treatment: bold opaque bottom bar, photo stays fully bright above it ────
-async function renderBottomBar(ctx, size, bg, { headline, engagementText, contactText }) {
-  if (bg) ctx.drawImage(bg, 0, 0, size, size);
-
-  const barH = 380;
-  const barY = size - barH;
-  ctx.fillStyle = '#0A0E14';
-  ctx.fillRect(0, barY, size, barH);
-  ctx.fillStyle = '#FF3B30';
-  ctx.fillRect(0, barY, size, 8);
-
-  const headSize = headline.length > 40 ? 54 : headline.length > 26 ? 62 : 72;
-  ctx.font = `bold ${headSize}px "${BRAND.font}"`;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
+function drawLabel(ctx, text, x, y, { size = 26, color = 'rgba(255,255,255,0.88)', align = 'left', shadow = true } = {}) {
+  if (!text) return;
+  ctx.font = `${size}px "${LABEL_FONT}"`;
+  ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
-  const lines = measureAndWrap(ctx, stripEmoji(headline).toUpperCase(), size - 100);
-  const lineH = headSize * 1.12;
-  let ty = barY + 100;
-  lines.forEach(l => { drawTextWithShadow(ctx, l, size / 2, ty); ty += lineH; });
-
-  if (engagementText) {
-    ctx.font = `bold 34px "${BRAND.font}"`;
-    ctx.fillStyle = '#FF3B30';
-    drawTextWithShadow(ctx, stripEmoji(engagementText).toUpperCase() + ' >', size / 2, ty + 24);
-  }
-
-  await drawLogo(ctx, 28, 28, 72);
-  drawContactFooter(ctx, size, contactText);
+  ctx.fillStyle = color;
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 2; }
+  ctx.fillText(stripEmoji(text), x, y);
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 }
 
-// ── Treatment: diagonal stamp/ribbon banner across a bright photo ───────────
-async function renderRibbon(ctx, size, bg, { headline, engagementText, contactText }) {
+// Draw laid-out lines left-aligned at (x, firstBaseline). When `marker` is set
+// the highlighted word gets a lime marker block behind dark text; otherwise it
+// is simply tinted.
+function drawLines(ctx, layout, x, firstBaseline, { lineHeight = 1.04, color = '#fff', marker = true, markerText = '#0B0B0B', tint = BRAND.accent, stroke = null }) {
+  const { px, lines, highlight } = layout;
+  ctx.font = `${px}px "${HEAD_FONT}"`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  const space = ctx.measureText(' ').width;
+  let y = firstBaseline;
+  for (const line of lines) {
+    let cx = x;
+    for (let k = 0; k < line.length; k++) {
+      const { w, i } = line[k];
+      const ww = ctx.measureText(w).width;
+      const hl = highlight.has(i);
+      if (hl && marker) {
+        // adjacent highlighted words share one continuous marker block
+        const prevHl = k > 0 && highlight.has(line[k - 1].i);
+        const nextHl = k < line.length - 1 && highlight.has(line[k + 1].i);
+        const left = prevHl ? cx - space : cx - px * 0.1;
+        const right = nextHl ? cx + ww + space : cx + ww + px * 0.1;
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = BRAND.accent;
+        ctx.beginPath();
+        ctx.roundRect(left, y - px * 0.86, right - left, px * 1.06, px * 0.12);
+        ctx.fill();
+        ctx.restore();
+      }
+      if (stroke) {
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = stroke;
+        ctx.strokeStyle = '#000';
+        ctx.strokeText(w, cx, y);
+        ctx.restore();
+      }
+      ctx.fillStyle = hl ? (marker ? markerText : tint) : color;
+      ctx.fillText(w, cx, y);
+      cx += ww + space;
+    }
+    y += px * lineHeight;
+  }
+}
+
+// ── Treatment: caption - big sentence-case type bottom-left over a soft
+// gradient, one highlighted word. The photo stays the hero. ─────────────────
+async function renderCaption(ctx, size, bg, { headline, contactText }) {
   if (bg) ctx.drawImage(bg, 0, 0, size, size);
+  applyGrain(ctx, size);
+
+  const grad = ctx.createLinearGradient(0, size * 0.42, 0, size);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.82)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, size * 0.42, size, size * 0.58);
+
+  const layout = fitHeadline(ctx, stripEmoji(headline), { maxWidth: size - 132, maxLines: 4 });
+  const blockH = (layout.lines.length - 1) * layout.px * 1.04;
+  const firstBaseline = size - 112 - blockH;
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 3;
+  drawLines(ctx, layout, 66, firstBaseline, { color: '#fff' });
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+  drawLabel(ctx, contactText, 66, size - 52, { size: 24, color: 'rgba(255,255,255,0.72)' });
+  await drawLogo(ctx, size - 28 - 60, 28, 60);
+}
+
+// ── Treatment: sticker - the headline sits on a slightly tilted white note,
+// like a sticker slapped on the photo. The photo is untouched. ───────────────
+async function renderSticker(ctx, size, bg, { headline, contactText }) {
+  if (bg) ctx.drawImage(bg, 0, 0, size, size);
+  applyGrain(ctx, size);
+
+  const pad = 40;
+  const layout = fitHeadline(ctx, stripEmoji(headline), { scale: 0.66, maxWidth: 640, maxLines: 5 });
+  ctx.font = `${layout.px}px "${HEAD_FONT}"`;
+  const widest = Math.max(...layout.lines.map(line => ctx.measureText(line.map(t => t.w).join(' ')).width));
+  const w = widest + pad * 2;
+  const h = (layout.lines.length - 1) * layout.px * 1.08 + layout.px * 1.0 + pad * 2;
 
   ctx.save();
-  ctx.translate(size / 2, size / 2 - 20);
-  ctx.rotate(-8 * Math.PI / 180);
-
-  const fontSize = headline.length > 22 ? 58 : 72;
-  ctx.font = `bold ${fontSize}px "${BRAND.font}"`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const lines = measureAndWrap(ctx, stripEmoji(headline).toUpperCase(), size - 260);
-  const lineH = fontSize + 8;
-  const totalH = lines.length * lineH;
-  const ribbonH = totalH + 90;
-
-  const ribbonGrad = ctx.createLinearGradient(-size, 0, size, 0);
-  ribbonGrad.addColorStop(0, '#B8140A');
-  ribbonGrad.addColorStop(0.5, '#FF3B30');
-  ribbonGrad.addColorStop(1, '#B8140A');
-  ctx.fillStyle = ribbonGrad;
-  ctx.fillRect(-size * 0.75, -ribbonH / 2, size * 1.5, ribbonH);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(-size * 0.75, ribbonH / 2 - 10, size * 1.5, 10);
-  ctx.fillRect(-size * 0.75, -ribbonH / 2, size * 1.5, 10);
-
+  ctx.translate(70 + w / 2, 96 + h / 2);
+  ctx.rotate(-2.6 * Math.PI / 180);
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 12;
   ctx.fillStyle = '#FFFFFF';
-  let ty = -totalH / 2 + lineH / 2;
-  lines.forEach(l => { drawTextWithShadow(ctx, l, 0, ty, 'rgba(0,0,0,0.5)', 12); ty += lineH; });
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, 22);
+  ctx.fill();
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  drawLines(ctx, layout, -w / 2 + pad, -h / 2 + pad + layout.px * 0.86, { lineHeight: 1.08, color: '#0B0B0B' });
   ctx.restore();
 
-  if (engagementText) {
-    ctx.font = `bold 34px "${BRAND.font}"`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    const text = stripEmoji(engagementText).toUpperCase() + ' >';
-    const w = ctx.measureText(text).width;
-    const py = (size / 2 - 20) + ribbonH / 2 + 55;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(size / 2 - w / 2 - 24, py - 34, w + 48, 56, 28);
-    ctx.fill();
-    ctx.fillStyle = '#B8140A';
-    ctx.fillText(text, size / 2, py + 12);
-  }
-
-  await drawLogo(ctx, 28, 28, 72);
-  drawContactFooter(ctx, size, contactText, { barColor: null });
-}
-
-// ── Treatment: bold opaque top block (highlighter-tape style) ───────────────
-async function renderTopBlock(ctx, size, bg, { headline, engagementText, contactText }) {
-  if (bg) ctx.drawImage(bg, 0, 0, size, size);
-
-  const barH = 360;
-  ctx.fillStyle = '#FFD400';
-  ctx.fillRect(0, 0, size, barH);
-  ctx.fillStyle = '#111111';
-  ctx.fillRect(0, barH - 8, size, 8);
-
-  const headSize = headline.length > 40 ? 50 : headline.length > 26 ? 58 : 66;
-  ctx.font = `bold ${headSize}px "${BRAND.font}"`;
-  ctx.fillStyle = '#111111';
+  // small black "price tag" sticker bottom-right
+  const tag = stripEmoji(contactText || 'ml-innovate.com');
+  ctx.font = `28px "${LABEL_FONT}"`;
+  const tw = ctx.measureText(tag).width + 44;
+  ctx.save();
+  ctx.translate(size - 60 - tw / 2, size - 74);
+  ctx.rotate(2.2 * Math.PI / 180);
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+  ctx.fillStyle = '#0B0B0B';
+  ctx.beginPath();
+  ctx.roundRect(-tw / 2, -28, tw, 56, 28);
+  ctx.fill();
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  const lines = measureAndWrap(ctx, stripEmoji(headline).toUpperCase(), size - 100);
-  const lineH = headSize * 1.09;
-  const totalH = lines.length * lineH;
-  let ty = barH / 2 - totalH / 2 + headSize * 0.8;
-  lines.forEach(l => { ctx.fillText(l, size / 2, ty); ty += lineH; });
+  ctx.textBaseline = 'middle';
+  ctx.fillText(tag, 0, 2);
+  ctx.restore();
 
-  if (engagementText) {
-    ctx.font = `bold 30px "${BRAND.font}"`;
-    const text = stripEmoji(engagementText).toUpperCase() + ' >';
-    const w = ctx.measureText(text).width;
-    ctx.fillStyle = '#111111';
-    ctx.beginPath();
-    ctx.roundRect(size / 2 - w / 2 - 20, size - 74, w + 40, 48, 24);
-    ctx.fill();
-    ctx.fillStyle = '#FFD400';
-    ctx.fillText(text, size / 2, size - 42);
-  }
-
-  await drawLogo(ctx, size - 28 - 72, 28, 72);
+  await drawLogo(ctx, size - 28 - 60, 28, 60);
 }
 
-const RENDERERS = { bottomBar: renderBottomBar, ribbon: renderRibbon, topBlock: renderTopBlock };
+// ── Treatment: poster - huge lowercase type with a heavy outline straight on
+// the photo. Loud, unpolished, meme-adjacent. ────────────────────────────────
+async function renderPoster(ctx, size, bg, { headline, contactText }) {
+  if (bg) ctx.drawImage(bg, 0, 0, size, size);
+  applyGrain(ctx, size);
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.fillRect(0, 0, size, size);
+
+  const layout = fitHeadline(ctx, stripEmoji(headline).toLowerCase(), { scale: 1.12, maxWidth: size - 112, maxLines: 4 });
+  drawLines(ctx, layout, 56, 56 + layout.px * 0.92, { lineHeight: 0.98, color: '#fff', marker: false, stroke: Math.max(10, Math.round(layout.px * 0.14)) });
+
+  drawLabel(ctx, contactText, 56, size - 46, { size: 26, color: '#fff' });
+  await drawLogo(ctx, size - 28 - 60, size - 28 - 60, 60);
+}
+
+const RENDERERS = { caption: renderCaption, sticker: renderSticker, poster: renderPoster };
 
 async function buildImage({ prompt, headline, engagementText, contactText = DEFAULT_CONTACT_TEXT, outputPath, notes = null, treatment = null }) {
   ensureDir();
@@ -316,20 +362,20 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
   const bgTemp = path.join(IMAGES_DIR, `_bg_${Date.now()}.png`);
   let bg;
 
-  // The provocative style deliberately puts REAL, mundane, everyday objects and
-  // scenes in front of the camera (a vending machine, a messy desk, a person at
-  // a urinal) rather than staged "cinematic sports action" - that widens the
-  // trademark/likeness surface area a lot: any of those scenes can trigger a
-  // real, readable consumer brand logo or an identifiable real person if not
-  // explicitly told not to, not just "team logos" like the old sport-photo style
-  // had to worry about. This safety suffix is unconditional, not just for
-  // scenes with people in them.
-  const peopleWords = /\b(people|person|player|players|human|humans|athlete|athletes|man|woman|men|women|coach|worker|analyst|employee)\b/i;
+  // Style: the old prompts asked for "photorealistic, bright even lighting,
+  // sharp focus", which is exactly what produces glossy stock-photo output.
+  // 2026 feed content that stops the scroll looks like a candid phone snapshot:
+  // direct flash, grain, off-center, a little wrong. The safety clauses stay:
+  // scenes full of real everyday objects and people can come back with a real
+  // consumer logo or an identifiable person, a legal problem regardless of how
+  // edgy the concept is.
+  const peopleWords = /\b(people|person|player|players|human|humans|athlete|athletes|man|woman|men|women|coach|worker|analyst|employee|scout)\b/i;
   const wantsPeople = peopleWords.test(notes || '') || peopleWords.test(prompt || '');
-  const safetySuffix = 'no real brand names or logos of any kind, no readable text or signage, no identifiable real person or public figure, generic/fictional setting, photorealistic, vivid natural color, bright even lighting';
+  const styleSuffix = 'raw amateur smartphone photograph, harsh direct on-camera flash, slightly overexposed, visible film grain, imperfect off-center framing, candid snapshot, mundane and a little uncanny, not a stock photo, not studio lighting, not cinematic, not an illustration';
+  const safetySuffix = 'no real brand names or logos of any kind, no readable text or signage, no identifiable real person or public figure, generic fictional setting, no visible genitals or nudity';
   const safePrompt = wantsPeople
-    ? `${prompt}, generic unbranded plain solid-color t-shirts (not polo shirts, no collar logos or embroidered crests) and plain unbranded footwear (no swoosh or stripe marks), candid documentary photography style, ${safetySuffix}`
-    : `${prompt}, ${safetySuffix}, highly detailed, sharp focus`;
+    ? `${prompt}, generic unbranded plain solid-color clothing (no polo shirts, no collar logos, no embroidered crests) and plain unmarked dark leather shoes or plain boots instead of sneakers, any held object (cups, bottles, phones) gripped firmly and physically supported by fingers wrapped around it, never floating (no swoosh, no stripes, no logos on any footwear), ${styleSuffix}, ${safetySuffix}`
+    : `${prompt}, ${styleSuffix}, ${safetySuffix}`;
 
   try {
     await fetchOpenAIBackground(safePrompt, bgTemp);
@@ -342,17 +388,14 @@ async function buildImage({ prompt, headline, engagementText, contactText = DEFA
     try { if (fs.existsSync(bgTemp)) fs.unlinkSync(bgTemp); } catch {}
   }
 
-  const chosenTreatment = treatment || nextTreatment(TREATMENTS);
-  const renderer = RENDERERS[chosenTreatment] || renderBottomBar;
+  const chosen = treatment && RENDERERS[treatment] ? treatment : nextTreatment(TREATMENTS);
+  const renderer = RENDERERS[chosen] || renderCaption;
 
-  // bg is null when the OpenAI call failed - createGradientFallback already
-  // painted the gradient directly onto ctx above, and each renderer's
-  // `if (bg) ctx.drawImage(...)` guard leaves that gradient in place instead
-  // of trying to draw a nonexistent photo, so this call is safe either way.
+  // bg is null when the OpenAI call failed - the gradient is already painted
+  // and each renderer's `if (bg)` guard leaves it in place.
   await renderer(ctx, size, bg, { headline: headline || '', engagementText, contactText });
 
-  const buf = await canvas.encode('png');
-  fs.writeFileSync(outputPath, buf);
+  fs.writeFileSync(outputPath, await canvas.encode('png'));
   return outputPath;
 }
 
@@ -362,15 +405,14 @@ if (require.main === module) {
   const get = flag => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null; };
   const prompt = get('--prompt');
   const headline = get('--headline');
-  const engagementText = get('--engagement') || 'Read more';
   const contactText = get('--contact') || undefined; // fall through to buildImage's default when omitted
   const treatment = get('--treatment') || null;
   const output = get('--output') || path.join(IMAGES_DIR, `post_${Date.now()}.png`);
   if (!prompt || !headline) {
-    console.error('Usage: node src/image.js --prompt "..." --headline "..." [--engagement "..."] [--contact "..."] [--treatment bottomBar|ribbon|topBlock] [--output path.png]');
+    console.error('Usage: node src/image.js --prompt "..." --headline "..." [--contact "..."] [--treatment caption|sticker|poster] [--output path.png]');
     process.exit(1);
   }
-  buildImage({ prompt, headline, engagementText, contactText, treatment, outputPath: output })
+  buildImage({ prompt, headline, contactText, treatment, outputPath: output })
     .then(p => console.log(JSON.stringify({ imagePath: p, width: 1080, height: 1080, prompt })))
     .catch(err => { console.error(JSON.stringify({ error: err.message })); process.exit(1); });
 }

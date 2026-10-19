@@ -2,7 +2,7 @@ name: Generate Daily Post (Phase 1)
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 06:00 UTC — 2 hours before publish
+    - cron: "0 6 * * 1-4"   # Mon-Thu 06:00 UTC — 2 hours before publish
   workflow_dispatch:
     inputs:
       notes:
